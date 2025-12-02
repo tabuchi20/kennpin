@@ -8,15 +8,14 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont;
     padding: 20px;
-    position: relative;
+    text-align: center;
 }
 #status {
     padding: 20px;
     font-size: 24px;
     font-weight: bold;
     border-radius: 12px;
-    text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
 }
 .ok { background: green; color: white; }
 .ng { background: red; color: white; }
@@ -25,23 +24,14 @@ button {
     width: 100%;
     font-size: 20px;
     padding: 15px;
-    margin-top: 20px;
+    margin-top: 10px;
     border-radius: 10px;
-}
-table {
-    width: 100%;
-    margin-top: 20px;
-    border-collapse: collapse;
-}
-th, td {
-    border-bottom: 1px solid #ddd;
-    padding: 8px;
 }
 #video-container {
     position: relative;
     width: 100%;
     max-width: 400px;
-    margin: 20px 0;
+    margin: 0 auto 20px;
 }
 video {
     width: 100%;
@@ -50,13 +40,29 @@ video {
 #scan-frame {
     position: absolute;
     top: 50%; left: 50%;
-    width: 250px; height: 250px;
-    margin-left: -125px;
-    margin-top: -125px;
-    border: 3px solid rgba(0,200,0,0.7);
+    width: 300px; height: 300px;
+    margin-left: -150px;
+    margin-top: -150px;
+    border: 4px solid rgba(0,200,0,0.8);
     border-radius: 12px;
     pointer-events: none;
     box-sizing: border-box;
+}
+table {
+    width: 100%;
+    margin-top: 20px;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+th, td {
+    border-bottom: 1px solid #ddd;
+    padding: 6px;
+}
+#history-container {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 10px;
+    text-align: center;
 }
 </style>
 </head>
@@ -64,13 +70,15 @@ video {
 <h2>QRコード検品 Webアプリ</h2>
 <div id="status" class="normal">1回目のQRコードを読み取ってください</div>
 <div id="video-container">
-    <video id="v" autoplay playsinline></video>
+    <video id="v" autoplay playsinline muted></video>
     <div id="scan-frame"></div>
 </div>
 <button id="scanBtn">QRコードを読み取る</button>
 <button id="resetBtn">次のペアを読み取る</button>
 <h3>履歴</h3>
-<table id="history"></table>
+<div id="history-container">
+    <table id="history"></table>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script>
 let step = 1;
@@ -78,15 +86,14 @@ let firstCode1 = "";
 let firstCode2 = "";
 let secondCode = "";
 let scanning = false;
-const successSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
-const errorSound = new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg");
+let codeReader;
+const dbReq = indexedDB.open("checksDB", 1);
 let db;
-const req = indexedDB.open("checksDB", 1);
-req.onupgradeneeded = (e) => {
+dbReq.onupgradeneeded = (e) => {
     db = e.target.result;
     db.createObjectStore("checks", { keyPath: "id", autoIncrement: true });
 };
-req.onsuccess = (e) => {
+dbReq.onsuccess = (e) => {
     db = e.target.result;
     loadHistory();
 };
@@ -95,19 +102,28 @@ function setStatus(text, type="normal") {
     s.textContent = text;
     s.className = type;
 }
-const codeReader = new ZXing.BrowserQRCodeReader();
 const videoElement = document.getElementById('v');
 const frame = document.getElementById('scan-frame');
 async function scan() {
     if (scanning) return;
     scanning = true;
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+        const devices = await ZXing.BrowserQRCodeReader.listVideoInputDevices();
+        let backCameraId = devices.find(d => d.label.toLowerCase().includes("back"))?.deviceId || devices[0].deviceId;
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: { exact: backCameraId }, width: { ideal: 640 }, height: { ideal: 480 } }
+        });
         videoElement.srcObject = stream;
-        // QRコード1件のみ読み取り
-        const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'v');
-        handleScan(result.text);
-        stopCamera();
+        codeReader = new ZXing.BrowserQRCodeReader();
+        codeReader.decodeFromVideoDevice(backCameraId, 'v', (result, err) => {
+            if (result) {
+                // QRコード読み取り成功
+                handleScan(result.text);
+            } else {
+                // 解析失敗は枠を通常色に
+                frame.style.borderColor = 'rgba(0,200,0,0.8)';
+            }
+        });
     } catch(e) {
         alert("カメラ起動/読み取りに失敗: " + e.message);
         stopCamera();
@@ -115,42 +131,34 @@ async function scan() {
 }
 function stopCamera() {
     scanning = false;
+    if(codeReader) codeReader.reset();
     const stream = videoElement.srcObject;
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-    }
+    if (stream) stream.getTracks().forEach(track => track.stop());
     videoElement.srcObject = null;
 }
 function handleScan(code) {
     if (step === 1) {
-        if (code.length < 29) {
-            setStatus("バーコードが短すぎます（29文字未満）", "ng");
-            return;
-        }
-        firstCode1 = code.substring(28, 38); // 29文字目から10文字
-        firstCode2 = code.length >= 20 ? code.substring(10, 20) : ""; // 11文字目から10文字
+        if (code.length < 29) { setStatus("バーコードが短すぎます（29文字未満）", "ng"); return; }
+        firstCode1 = code.substring(28, 38);
+        firstCode2 = code.length >= 20 ? code.substring(10, 20) : "";
         setStatus("1回目完了 → 2回目のQRコードを読み取ってください", "normal");
+        frame.style.borderColor = 'rgba(0,200,0,0.8)';
         step = 2;
     } else if (step === 2) {
-        if (code.length < 34) {
-            setStatus("バーコードが短すぎます（34文字未満）", "ng");
-            return;
-        }
-        secondCode = code.substring(33, 43); // 34文字目から10文字
-        // 判定：firstCode1 または firstCode2 と一致すればOK
+        if (code.length < 34) { setStatus("バーコードが短すぎます（34文字未満）", "ng"); return; }
+        secondCode = code.substring(33, 43);
         let matchOK = (secondCode === firstCode1) || (firstCode2 !== "" && secondCode === firstCode2);
         if (matchOK) {
             setStatus(":チェックマーク大: 一致しました！", "ok");
-            successSound.play();
             frame.style.borderColor = 'green';
         } else {
             setStatus(":x_黒太字: 不一致です", "ng");
-            errorSound.play();
             frame.style.borderColor = 'red';
         }
         saveResult(firstCode1 + (firstCode2 ? " / " + firstCode2 : ""), secondCode, matchOK ? "OK" : "NG");
         loadHistory();
         step = 3;
+        stopCamera(); // 読み取り後カメラ停止
     }
 }
 function saveResult(first, second, result) {
@@ -179,7 +187,7 @@ function resetAll() {
     firstCode2 = "";
     secondCode = "";
     setStatus("1回目のQRコードを読み取ってください", "normal");
-    frame.style.borderColor = 'rgba(0,200,0,0.7)';
+    frame.style.borderColor = 'rgba(0,200,0,0.8)';
 }
 document.getElementById('scanBtn').addEventListener('click', scan);
 document.getElementById('resetBtn').addEventListener('click', resetAll);
