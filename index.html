@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<title>Barcode Checker Web (iPhone対応)</title>
+<title>Barcode Checker Web (QR専用)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
 body {
@@ -46,14 +46,14 @@ video {
 </style>
 </head>
 <body>
-<h2>バーコード検品 Webアプリ</h2>
-<div id="status" class="normal">1回目のバーコードを読み取ってください</div>
+<h2>QRコード検品 Webアプリ</h2>
+<div id="status" class="normal">1回目のQRコードを読み取ってください</div>
 <video id="v" autoplay playsinline></video>
-<button id="scanBtn">バーコードを読み取る</button>
+<button id="scanBtn">QRコードを読み取る</button>
 <button id="resetBtn">次のペアを読み取る</button>
 <h3>履歴</h3>
 <table id="history"></table>
-<!-- ZXingライブラリ -->
+<!-- ZXing QR専用ライブラリ -->
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script>
 let step = 1;
@@ -78,8 +78,8 @@ function setStatus(text, type="normal") {
     s.textContent = text;
     s.className = type;
 }
-// --- カメラ＆バーコード認識 ---
-const codeReader = new ZXing.BrowserMultiFormatReader();
+// --- QRコード専用リーダー ---
+const codeReader = new ZXing.BrowserQRCodeReader();
 const videoElement = document.getElementById('v');
 async function scan() {
     if (scanning) return;
@@ -87,7 +87,7 @@ async function scan() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
         videoElement.srcObject = stream;
-        // 1フレームごとに読み取り
+        // QRコード1件のみ読み取る
         const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'v');
         handleScan(result.text);
         stopCamera();
@@ -107,16 +107,14 @@ function stopCamera() {
 // --- スキャン結果処理 ---
 function handleScan(code) {
     if (step === 1) {
-        if (code.length < 29) { setStatus("バーコードが短すぎます（29文字未満）", "ng"); return; }
-        firstCode = code.substring(28, 38);
-        setStatus("1回目完了 → 2回目のバーコードを読み取ってください", "normal");
+        firstCode = code;
+        setStatus("1回目完了 → 2回目のQRコードを読み取ってください", "normal");
         step = 2;
     } else if (step === 2) {
-        if (code.length < 34) { setStatus("バーコードが短すぎます（34文字未満）", "ng"); return; }
-        secondCode = code.substring(33, 43);
+        secondCode = code;
         const result = (firstCode === secondCode);
-        if (result) { setStatus("✔ 一致しました！", "ok"); successSound.play(); }
-        else { setStatus("✖ 不一致です", "ng"); errorSound.play(); }
+        if (result) { setStatus(":チェックマーク大: 一致しました！", "ok"); successSound.play(); }
+        else { setStatus(":x_黒太字: 不一致です", "ng"); errorSound.play(); }
         saveResult(firstCode, secondCode, result ? "OK" : "NG");
         loadHistory();
         step = 3;
@@ -149,7 +147,7 @@ function resetAll() {
     step = 1;
     firstCode = "";
     secondCode = "";
-    setStatus("1回目のバーコードを読み取ってください", "normal");
+    setStatus("1回目のQRコードを読み取ってください", "normal");
 }
 // --- ボタンイベント ---
 document.getElementById('scanBtn').addEventListener('click', scan);
