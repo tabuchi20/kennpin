@@ -40,8 +40,8 @@ th, td {
 #video-container {
     position: relative;
     width: 100%;
-    max-width: 400px;
-    margin: 20px 0;
+    max-width: 350px;
+    margin: 20px auto;
 }
 video {
     width: 100%;
@@ -50,7 +50,7 @@ video {
 #scan-frame {
     position: absolute;
     top: 50%; left: 50%;
-    width: 180px; height: 180px;
+    width: 180px; height: 180px; /* ← 枠を小さくした */
     margin-left: -90px;
     margin-top: -90px;
     border: 3px solid rgba(0,200,0,0.7);
@@ -78,7 +78,12 @@ let firstCode1 = "";
 let firstCode2 = "";
 let secondCode = "";
 let scanning = false;
+/* 音声（読み取り音と判定音を分離） */
+// 1回目読み取り音（ピッ音）
+const scanBeep = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+// 一致（最終判定OK）
 const successSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+// 不一致（NG）
 const errorSound = new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg");
 let db;
 const req = indexedDB.open("checksDB", 1);
@@ -90,20 +95,21 @@ req.onsuccess = (e) => {
     db = e.target.result;
     loadHistory();
 };
-const scanBtn = document.getElementById('scanBtn');
-const resetBtn = document.getElementById('resetBtn');
+function setStatus(text, type="normal") {
+    const s = document.getElementById("status");
+    s.textContent = text;
+    s.className = type;
+}
+const codeReader = new ZXing.BrowserQRCodeReader();
 const videoElement = document.getElementById('v');
 const frame = document.getElementById('scan-frame');
-const codeReader = new ZXing.BrowserQRCodeReader();
-function setStatus(text, type="normal") {
-    document.getElementById("status").textContent = text;
-    document.getElementById("status").className = type;
-}
 async function scan() {
     if (scanning) return;
     scanning = true;
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } }
+        });
         videoElement.srcObject = stream;
         const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'v');
         handleScan(result.text);
@@ -116,36 +122,59 @@ async function scan() {
 function stopCamera() {
     scanning = false;
     const stream = videoElement.srcObject;
-    if (stream) stream.getTracks().forEach(track => track.stop());
+    if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+    }
     videoElement.srcObject = null;
 }
 function handleScan(code) {
+    /* ■■■ 1回目 ■■■ */
     if (step === 1) {
-        if (code.length < 29) { setStatus("バーコードが短すぎます（29文字未満）", "ng"); return; }
+        if (code.length < 29) {
+            setStatus("バーコードが短すぎます（29文字未満）", "ng");
+            return;
+        }
+        // 29〜38文字目
         firstCode1 = code.substring(28, 38);
+        // 11〜20文字目
         firstCode2 = code.length >= 20 ? code.substring(10, 20) : "";
+        // ピッ音（読み取り音）
+        scanBeep.play();
         setStatus("1回目完了 → 2回目のQRコードを読み取ってください", "normal");
-        frame.style.borderColor = 'rgba(0,200,0,0.8)';
-        successSound.play();
         step = 2;
-    } else if (step === 2) {
-        if (code.length < 34) { setStatus("バーコードが短すぎます（34文字未満）", "ng"); return; }
+        return;
+    }
+    /* ■■■ 2回目 ■■■ */
+    if (step === 2) {
+        if (code.length < 34) {
+            setStatus("バーコードが短すぎます（34文字未満）", "ng");
+            return;
+        }
+        // 34〜43文字目
         secondCode = code.substring(33, 43);
-        let matchOK = (secondCode === firstCode1) || (firstCode2 !== "" && secondCode === firstCode2);
+        // 判定（どちらか一致でOK）
+        let matchOK =
+            secondCode === firstCode1 ||
+            (firstCode2 !== "" && secondCode === firstCode2);
         if (matchOK) {
             setStatus(":チェックマーク大: 一致しました！", "ok");
-            frame.style.borderColor = 'green';
             successSound.play();
+            frame.style.borderColor = "green";
         } else {
             setStatus(":x_黒太字: 不一致です", "ng");
-            frame.style.borderColor = 'red';
             errorSound.play();
+            frame.style.borderColor = "red";
         }
-        saveResult(firstCode1 + (firstCode2 ? " / " + firstCode2 : ""), secondCode, matchOK ? "OK" : "NG");
+        saveResult(
+            firstCode1 + (firstCode2 ? " / " + firstCode2 : ""),
+            secondCode,
+            matchOK ? "OK" : "NG"
+        );
         loadHistory();
-        step = 3;
-        scanBtn.disabled = true;
+        step = 3; // ← ここで終了状態に入る
+        return;
     }
+    /* step=3 では読み取り無効 */
 }
 function saveResult(first, second, result) {
     const tx = db.transaction("checks", "readwrite");
@@ -163,7 +192,8 @@ function loadHistory() {
         const table = document.getElementById("history");
         table.innerHTML = `<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>`;
         req.result.reverse().forEach(r => {
-            table.innerHTML += `<tr><td>${r.time}</td><td>${r.first}</td><td>${r.second}</td><td>${r.result}</td></tr>`;
+            table.innerHTML +=
+                `<tr><td>${r.time}</td><td>${r.first}</td><td>${r.second}</td><td>${r.result}</td></tr>`;
         });
     };
 }
@@ -173,11 +203,10 @@ function resetAll() {
     firstCode2 = "";
     secondCode = "";
     setStatus("1回目のQRコードを読み取ってください", "normal");
-    frame.style.borderColor = 'rgba(0,200,0,0.7)';
-    scanBtn.disabled = false;
+    frame.style.borderColor = "rgba(0,200,0,0.7)";
 }
-scanBtn.addEventListener('click', scan);
-resetBtn.addEventListener('click', resetAll);
+document.getElementById('scanBtn').addEventListener('click', scan);
+document.getElementById('resetBtn').addEventListener('click', resetAll);
 </script>
 </body>
 </html>
