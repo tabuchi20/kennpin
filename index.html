@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>Barcode Checker Web</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+body {
+    font-family: -apple-system, BlinkMacSystemFont;
+    padding: 20px;
+}
+#status {
+    padding: 20px;
+    font-size: 24px;
+    font-weight: bold;
+    border-radius: 12px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+.ok {
+    background: green;
+    color: white;
+}
+.ng {
+    background: red;
+    color: white;
+}
+.normal {
+    background: #e5e5e5;
+    color: #0066cc;
+}
+button {
+    width: 100%;
+    font-size: 20px;
+    padding: 15px;
+    margin-top: 20px;
+    border-radius: 10px;
+}
+table {
+    width: 100%;
+    margin-top: 20px;
+    border-collapse: collapse;
+}
+th, td {
+    border-bottom: 1px solid #ddd;
+    padding: 8px;
+}
+</style>
+</head>
+<body>
+<h2>バーコード検品 Webアプリ</h2>
+<div id="status" class="normal">1回目のバーコードを読み取ってください</div>
+<button onclick="scan()">バーコードを読み取る</button>
+<button onclick="resetAll()">次のペアを読み取る</button>
+<h3>履歴</h3>
+<table id="history"></table>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode"></script>
+<script>
+let step = 1;
+let firstCode = "";
+let secondCode = "";
+// 成功・エラー音
+const successSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+const errorSound = new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg");
+// IndexedDB で履歴保存
+let db;
+const req = indexedDB.open("checksDB", 1);
+req.onupgradeneeded = (e) => {
+    db = e.target.result;
+    db.createObjectStore("checks", { keyPath: "id", autoIncrement: true });
+};
+req.onsuccess = (e) => {
+    db = e.target.result;
+    loadHistory();
+};
+// 状態表示
+function setStatus(text, type="normal") {
+    const s = document.getElementById("status");
+    s.textContent = text;
+    s.className = type;
+}
+// カメラで読み取り
+function scan() {
+    const html5QrCode = new Html5Qrcode("reader", { formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.EAN_13 ] });
+    // 画面にカメラ領域を作る
+    const readerDiv = document.createElement("div");
+    readerDiv.id = "reader";
+    document.body.appendChild(readerDiv);
+    html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 300 },
+        (decodedText) => {
+            html5QrCode.stop();
+            readerDiv.remove();
+            handleScan(decodedText);
+        }
+    );
+}
+// スキャン処理
+function handleScan(code) {
+    if (step === 1) {
+        if (code.length < 29) {
+            setStatus("バーコードが短すぎます（29文字未満）", "ng");
+            return;
+        }
+        firstCode = code.substring(28, 38);
+        setStatus("1回目完了 → 2回目のバーコードを読み取ってください", "normal");
+        step = 2;
+    } else if (step === 2) {
+        if (code.length < 34) {
+            setStatus("バーコードが短すぎます（34文字未満）", "ng");
+            return;
+        }
+        secondCode = code.substring(33, 43);
+        let result = (firstCode === secondCode);
+        if (result) {
+            setStatus("✔ 一致しました！", "ok");
+            successSound.play();
+        } else {
+            setStatus("✖ 不一致です", "ng");
+            errorSound.play();
+        }
+        saveResult(firstCode, secondCode, result ? "OK" : "NG");
+        loadHistory();
+        step = 3;
+    }
+}
+//履歴保存
+function saveResult(first, second, result) {
+    const tx = db.transaction("checks", "readwrite");
+    tx.objectStore("checks").add({
+        time: new Date().toLocaleString(),
+        first,
+        second,
+        result
+    });
+}
+// 履歴読み込み
+function loadHistory() {
+    const tx = db.transaction("checks", "readonly");
+    const req = tx.objectStore("checks").getAll();
+    req.onsuccess = () => {
+        const table = document.getElementById("history");
+        table.innerHTML = `
+            <tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>
+        `;
+        req.result.reverse().forEach(r => {
+            table.innerHTML += `
+                <tr>
+                    <td>${r.time}</td>
+                    <td>${r.first}</td>
+                    <td>${r.second}</td>
+                    <td>${r.result}</td>
+                </tr>
+            `;
+        });
+    };
+}
+// リセット
+function resetAll() {
+    step = 1;
+    firstCode = "";
+    secondCode = "";
+    setStatus("1回目のバーコードを読み取ってください", "normal");
+}
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
