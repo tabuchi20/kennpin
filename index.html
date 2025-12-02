@@ -2,12 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<title>Barcode Checker Web (QR専用)</title>
+<title>QRコード検品 Webアプリ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
 body {
     font-family: -apple-system, BlinkMacSystemFont;
     padding: 20px;
+    position: relative;
 }
 #status {
     padding: 20px;
@@ -36,24 +37,40 @@ th, td {
     border-bottom: 1px solid #ddd;
     padding: 8px;
 }
-video {
+#video-container {
+    position: relative;
     width: 100%;
     max-width: 400px;
     margin: 20px 0;
+}
+video {
+    width: 100%;
     border-radius: 12px;
-    background: black;
+}
+#scan-frame {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 250px; height: 250px;
+    margin-left: -125px;
+    margin-top: -125px;
+    border: 3px solid rgba(0,200,0,0.7);
+    border-radius: 12px;
+    pointer-events: none;
+    box-sizing: border-box;
 }
 </style>
 </head>
 <body>
 <h2>QRコード検品 Webアプリ</h2>
 <div id="status" class="normal">1回目のQRコードを読み取ってください</div>
-<video id="v" autoplay playsinline></video>
+<div id="video-container">
+    <video id="v" autoplay playsinline></video>
+    <div id="scan-frame"></div>
+</div>
 <button id="scanBtn">QRコードを読み取る</button>
 <button id="resetBtn">次のペアを読み取る</button>
 <h3>履歴</h3>
 <table id="history"></table>
-<!-- ZXing QR専用ライブラリ -->
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script>
 let step = 1;
@@ -62,7 +79,6 @@ let secondCode = "";
 let scanning = false;
 const successSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 const errorSound = new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg");
-// IndexedDB
 let db;
 const req = indexedDB.open("checksDB", 1);
 req.onupgradeneeded = (e) => {
@@ -78,16 +94,17 @@ function setStatus(text, type="normal") {
     s.textContent = text;
     s.className = type;
 }
-// --- QRコード専用リーダー ---
+// QRコード専用リーダー
 const codeReader = new ZXing.BrowserQRCodeReader();
 const videoElement = document.getElementById('v');
+const frame = document.getElementById('scan-frame');
 async function scan() {
     if (scanning) return;
     scanning = true;
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
         videoElement.srcObject = stream;
-        // QRコード1件のみ読み取る
+        // QRコード1件のみ読み取り
         const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'v');
         handleScan(result.text);
         stopCamera();
@@ -104,7 +121,7 @@ function stopCamera() {
     }
     videoElement.srcObject = null;
 }
-// --- スキャン結果処理 ---
+// スキャン結果処理
 function handleScan(code) {
     if (step === 1) {
         firstCode = code;
@@ -113,14 +130,14 @@ function handleScan(code) {
     } else if (step === 2) {
         secondCode = code;
         const result = (firstCode === secondCode);
-        if (result) { setStatus(":チェックマーク大: 一致しました！", "ok"); successSound.play(); }
-        else { setStatus(":x_黒太字: 不一致です", "ng"); errorSound.play(); }
+        if (result) { setStatus(":チェックマーク大: 一致しました！", "ok"); successSound.play(); frame.style.borderColor = 'green'; }
+        else { setStatus(":x_黒太字: 不一致です", "ng"); errorSound.play(); frame.style.borderColor = 'red'; }
         saveResult(firstCode, secondCode, result ? "OK" : "NG");
         loadHistory();
         step = 3;
     }
 }
-// --- IndexedDB 保存 ---
+// IndexedDB 保存
 function saveResult(first, second, result) {
     const tx = db.transaction("checks", "readwrite");
     tx.objectStore("checks").add({
@@ -130,7 +147,7 @@ function saveResult(first, second, result) {
         result
     });
 }
-// --- 履歴表示 ---
+// 履歴表示
 function loadHistory() {
     const tx = db.transaction("checks", "readonly");
     const req = tx.objectStore("checks").getAll();
@@ -142,14 +159,15 @@ function loadHistory() {
         });
     };
 }
-// --- リセット ---
+// リセット
 function resetAll() {
     step = 1;
     firstCode = "";
     secondCode = "";
     setStatus("1回目のQRコードを読み取ってください", "normal");
+    frame.style.borderColor = 'rgba(0,200,0,0.7)';
 }
-// --- ボタンイベント ---
+// ボタンイベント
 document.getElementById('scanBtn').addEventListener('click', scan);
 document.getElementById('resetBtn').addEventListener('click', resetAll);
 </script>
