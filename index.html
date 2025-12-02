@@ -17,15 +17,29 @@ body {
     text-align: center;
     margin-bottom: 20px;
 }
-.ok { background: green; color: white; }
-.ng { background: red; color: white; }
-.normal { background: #e5e5e5; color: #0066cc; }
+.ok {
+    background: green;
+    color: white;
+}
+.ng {
+    background: red;
+    color: white;
+}
+.normal {
+    background: #e5e5e5;
+    color: #0066cc;
+}
 button {
     width: 100%;
     font-size: 20px;
     padding: 15px;
     margin-top: 20px;
     border-radius: 10px;
+}
+#reader {
+    width: 100%;
+    max-width: 400px;
+    margin: 20px auto;
 }
 table {
     width: 100%;
@@ -36,19 +50,14 @@ th, td {
     border-bottom: 1px solid #ddd;
     padding: 8px;
 }
-#reader {
-    width: 100%;
-    max-width: 350px;
-    margin: 20px auto;
-}
 </style>
 </head>
 <body>
 <h2>バーコード検品 Webアプリ</h2>
 <div id="status" class="normal">1回目のバーコードを読み取ってください</div>
-<!-- ★ここにカメラ映像を表示 -->
+<!-- ★ カメラ描画領域（必須） -->
 <div id="reader"></div>
-<button onclick="scan()">バーコードを読み取る</button>
+<button onclick="startScan()">バーコードを読み取る</button>
 <button onclick="resetAll()">次のペアを読み取る</button>
 <h3>履歴</h3>
 <table id="history"></table>
@@ -57,8 +66,10 @@ th, td {
 let step = 1;
 let firstCode = "";
 let secondCode = "";
+// 成功・エラー音
 const successSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 const errorSound = new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg");
+// IndexedDB 初期化
 let db;
 const req = indexedDB.open("checksDB", 1);
 req.onupgradeneeded = (e) => {
@@ -69,13 +80,14 @@ req.onsuccess = (e) => {
     db = e.target.result;
     loadHistory();
 };
+// 状態表示
 function setStatus(text, type="normal") {
     const s = document.getElementById("status");
     s.textContent = text;
     s.className = type;
 }
-// ★ カメラ起動（reader が既に存在するので確実に動く）
-function scan() {
+// カメラ起動と読み取り
+function startScan() {
     const html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start(
         { facingMode: "environment" },
@@ -83,11 +95,11 @@ function scan() {
         (decodedText) => {
             html5QrCode.stop();
             handleScan(decodedText);
-        }
-    ).catch(err => {
-        alert("カメラを起動できませんでした: " + err);
-    });
+        },
+        () => {}
+    );
 }
+// 読み取り処理
 function handleScan(code) {
     if (step === 1) {
         if (code.length < 29) {
@@ -103,7 +115,7 @@ function handleScan(code) {
             return;
         }
         secondCode = code.substring(33, 43);
-        let result = (firstCode === secondCode);
+        const result = (firstCode === secondCode);
         if (result) {
             setStatus("✔ 一致しました！", "ok");
             successSound.play();
@@ -116,6 +128,7 @@ function handleScan(code) {
         step = 3;
     }
 }
+// 履歴保存
 function saveResult(first, second, result) {
     const tx = db.transaction("checks", "readwrite");
     tx.objectStore("checks").add({
@@ -125,6 +138,7 @@ function saveResult(first, second, result) {
         result
     });
 }
+// 履歴表示
 function loadHistory() {
     const tx = db.transaction("checks", "readonly");
     const req = tx.objectStore("checks").getAll();
@@ -145,6 +159,7 @@ function loadHistory() {
         });
     };
 }
+// リセット
 function resetAll() {
     step = 1;
     firstCode = "";
