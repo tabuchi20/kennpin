@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<title>Barcode Checker Web</title>
+<title>Barcode Checker Web (iPhone対応)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
 body {
@@ -36,30 +36,33 @@ th, td {
     border-bottom: 1px solid #ddd;
     padding: 8px;
 }
-#reader {
+video {
     width: 100%;
-    max-width: 350px;
-    margin: 20px auto;
+    max-width: 400px;
+    margin: 20px 0;
+    border-radius: 12px;
+    background: black;
 }
 </style>
 </head>
 <body>
 <h2>バーコード検品 Webアプリ</h2>
 <div id="status" class="normal">1回目のバーコードを読み取ってください</div>
-<!-- カメラ表示用 div -->
-<div id="reader"></div>
-<button onclick="scan()">バーコードを読み取る</button>
-<button onclick="resetAll()">次のペアを読み取る</button>
+<video id="v" autoplay playsinline></video>
+<button id="scanBtn">バーコードを読み取る</button>
+<button id="resetBtn">次のペアを読み取る</button>
 <h3>履歴</h3>
 <table id="history"></table>
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode"></script>
+<!-- ZXingライブラリ -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script>
 let step = 1;
 let firstCode = "";
 let secondCode = "";
+let scanning = false;
 const successSound = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 const errorSound = new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg");
-// IndexedDB で履歴保存
+// IndexedDB
 let db;
 const req = indexedDB.open("checksDB", 1);
 req.onupgradeneeded = (e) => {
@@ -75,29 +78,33 @@ function setStatus(text, type="normal") {
     s.textContent = text;
     s.className = type;
 }
-// カメラ起動＆バーコード読み取り
+// --- カメラ＆バーコード認識 ---
+const codeReader = new ZXing.BrowserMultiFormatReader();
+const videoElement = document.getElementById('v');
 async function scan() {
+    if (scanning) return;
+    scanning = true;
     try {
-        const html5QrCode = new Html5Qrcode("reader", {
-            formatsToSupport: [
-                Html5QrcodeSupportedFormats.QR_CODE,
-                Html5QrcodeSupportedFormats.CODE_128,
-                Html5QrcodeSupportedFormats.EAN_13
-            ]
-        });
-        await html5QrCode.start(
-            { facingMode: { ideal: "environment" } },
-            { fps: 10, qrbox: 300 },
-            (decodedText) => {
-                html5QrCode.stop();
-                handleScan(decodedText);
-            }
-        );
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+        videoElement.srcObject = stream;
+        // 1フレームごとに読み取り
+        const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'v');
+        handleScan(result.text);
+        stopCamera();
     } catch(e) {
-        alert("カメラ起動に失敗しました: " + e.message);
+        alert("カメラ起動/読み取りに失敗: " + e.message);
+        stopCamera();
     }
 }
-// スキャン処理
+function stopCamera() {
+    scanning = false;
+    const stream = videoElement.srcObject;
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+    }
+    videoElement.srcObject = null;
+}
+// --- スキャン結果処理 ---
 function handleScan(code) {
     if (step === 1) {
         if (code.length < 29) { setStatus("バーコードが短すぎます（29文字未満）", "ng"); return; }
@@ -107,7 +114,7 @@ function handleScan(code) {
     } else if (step === 2) {
         if (code.length < 34) { setStatus("バーコードが短すぎます（34文字未満）", "ng"); return; }
         secondCode = code.substring(33, 43);
-        let result = (firstCode === secondCode);
+        const result = (firstCode === secondCode);
         if (result) { setStatus("✔ 一致しました！", "ok"); successSound.play(); }
         else { setStatus("✖ 不一致です", "ng"); errorSound.play(); }
         saveResult(firstCode, secondCode, result ? "OK" : "NG");
@@ -115,12 +122,17 @@ function handleScan(code) {
         step = 3;
     }
 }
-// 履歴保存
+// --- IndexedDB 保存 ---
 function saveResult(first, second, result) {
     const tx = db.transaction("checks", "readwrite");
-    tx.objectStore("checks").add({ time: new Date().toLocaleString(), first, second, result });
+    tx.objectStore("checks").add({
+        time: new Date().toLocaleString(),
+        first,
+        second,
+        result
+    });
 }
-// 履歴読み込み
+// --- 履歴表示 ---
 function loadHistory() {
     const tx = db.transaction("checks", "readonly");
     const req = tx.objectStore("checks").getAll();
@@ -132,13 +144,16 @@ function loadHistory() {
         });
     };
 }
-// リセット
+// --- リセット ---
 function resetAll() {
     step = 1;
     firstCode = "";
     secondCode = "";
     setStatus("1回目のバーコードを読み取ってください", "normal");
 }
+// --- ボタンイベント ---
+document.getElementById('scanBtn').addEventListener('click', scan);
+document.getElementById('resetBtn').addEventListener('click', resetAll);
 </script>
 </body>
 </html>
