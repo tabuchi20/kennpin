@@ -40,13 +40,31 @@ video {
 #scan-frame {
     position: absolute;
     top: 50%; left: 50%;
-    width: 300px; height: 300px;
-    margin-left: -150px;
-    margin-top: -150px;
-    border: 4px solid rgba(0,200,0,0.8);
+    width: 200px;
+    height: 200px;
+    margin-left: -100px;
+    margin-top: -100px;
+    border: 3px solid rgba(0,200,0,0.8);
     border-radius: 12px;
     pointer-events: none;
     box-sizing: border-box;
+}
+/* 中央十字線 */
+#scan-frame::before,
+#scan-frame::after {
+    content: '';
+    position: absolute;
+    background-color: rgba(0,200,0,0.8);
+}
+#scan-frame::before { /* 縦線 */
+    top: 0; left: 50%;
+    width: 2px; height: 100%;
+    margin-left: -1px;
+}
+#scan-frame::after { /* 横線 */
+    top: 50%; left: 0;
+    width: 100%; height: 2px;
+    margin-top: -1px;
 }
 table {
     width: 100%;
@@ -87,8 +105,9 @@ let firstCode2 = "";
 let secondCode = "";
 let scanning = false;
 let codeReader;
-const dbReq = indexedDB.open("checksDB", 1);
+// IndexedDB 初期化
 let db;
+const dbReq = indexedDB.open("checksDB", 1);
 dbReq.onupgradeneeded = (e) => {
     db = e.target.result;
     db.createObjectStore("checks", { keyPath: "id", autoIncrement: true });
@@ -97,36 +116,30 @@ dbReq.onsuccess = (e) => {
     db = e.target.result;
     loadHistory();
 };
+const videoElement = document.getElementById('v');
+const frame = document.getElementById('scan-frame');
 function setStatus(text, type="normal") {
     const s = document.getElementById("status");
     s.textContent = text;
     s.className = type;
 }
-const videoElement = document.getElementById('v');
-const frame = document.getElementById('scan-frame');
 async function scan() {
     if (scanning) return;
     scanning = true;
     try {
-        const devices = await ZXing.BrowserQRCodeReader.listVideoInputDevices();
-        let backCameraId = devices.find(d => d.label.toLowerCase().includes("back"))?.deviceId || devices[0].deviceId;
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: backCameraId }, width: { ideal: 640 }, height: { ideal: 480 } }
+            video: { facingMode: { ideal: "environment" } }
         });
         videoElement.srcObject = stream;
         codeReader = new ZXing.BrowserQRCodeReader();
-        codeReader.decodeFromVideoDevice(backCameraId, 'v', (result, err) => {
+        codeReader.decodeFromVideoDevice(undefined, 'v', (result, err) => {
             if (result) {
-                // QRコード読み取り成功
                 handleScan(result.text);
-            } else {
-                // 解析失敗は枠を通常色に
-                frame.style.borderColor = 'rgba(0,200,0,0.8)';
             }
         });
-    } catch(e) {
-        alert("カメラ起動/読み取りに失敗: " + e.message);
-        stopCamera();
+    } catch (e) {
+        alert("カメラ起動に失敗しました: " + e.message);
+        scanning = false;
     }
 }
 function stopCamera() {
@@ -158,7 +171,7 @@ function handleScan(code) {
         saveResult(firstCode1 + (firstCode2 ? " / " + firstCode2 : ""), secondCode, matchOK ? "OK" : "NG");
         loadHistory();
         step = 3;
-        stopCamera(); // 読み取り後カメラ停止
+        stopCamera();
     }
 }
 function saveResult(first, second, result) {
