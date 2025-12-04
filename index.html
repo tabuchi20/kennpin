@@ -138,7 +138,7 @@ async function startCamera() {
         const config = {
             fps: 10,
             qrbox: mode === "hinban"
-                ? { width: 350, height: 120 }  // 品番検品は横長
+                ? { width: 250, height: 50 }  // 品番検品は横長
                 : 250
         };
 
@@ -263,3 +263,4 @@ async function finishCheck(ok, a, b) {
 
 </body>
 </html>
+
