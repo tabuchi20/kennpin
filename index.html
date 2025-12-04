@@ -1,136 +1,7 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<!-- 通常のfavicon -->
-<link rel="icon" href="icon/favicon.png" type="image/png">
-<!-- iPhone（ホーム画面追加）のアイコン -->
-<link rel="apple-touch-icon" href="icon/icon-180.png">
-<!-- Android / PWA 用アイコン -->
-<link rel="manifest" href="manifest.webmanifest">
-<meta charset="UTF-8" />
-<title>QRコード検品 Webアプリ</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<style>
-body {
-    font-family: -apple-system, BlinkMacSystemFont;
-    padding: 20px;
-    position: relative;
-}
-#status {
-    padding: 20px;
-    font-size: 24px;
-    font-weight: bold;
-    border-radius: 12px;
-    text-align: center;
-    margin-bottom: 20px;
-}
-.ok { background: green; color: white; }
-.ng { background: red; color: white; }
-.normal { background: #e5e5e5; color: #0066cc; }
-button {
-    width: 100%;
-    font-size: 20px;
-    padding: 15px;
-    margin-top: 20px;
-    border-radius: 10px;
-}
-table {
-    width: 100%;
-    margin-top: 20px;
-    border-collapse: collapse;
-}
-th, td {
-    border-bottom: 1px solid #ddd;
-    padding: 8px;
-}
-#video-container {
-    position: relative;
-    width: 100%;
-    max-width: 300px;
-    margin: 20px 0;
-}
-video {
-    width: 100%;
-    border-radius: 12px;
-}
-#scan-frame {
-    position: absolute;
-    top: 50%; left: 50%;
-    border: 3px solid rgba(0,200,0,0.7);
-    pointer-events: none;
-    box-sizing: border-box;
-    border-radius: 12px;
-    transform: translate(-50%, -50%);
-}
-/* 通常検品（正方形） */
-.frame-normal {
-    width: 180px;
-    height: 180px;
-}
-/* 品番検品（横長） */
-.frame-hinban {
-    width: 260px;
-    height: 60px;
-}
-</style>
-</head>
-<body>
-<h2>QRコード検品 Webアプリ</h2>
-<select id="modeSelect">
-    <option value="normal">通常検品（QR）</option>
-    <option value="hinban">品番検品（バーコード）</option>
-</select>
-<div id="status" class="normal">現品票のQRコードを読み取ってください</div>
-<div id="video-container">
-    <video id="v" autoplay playsinline></video>
-    <div id="scan-frame" class="frame-normal"></div>
-</div>
-<button id="scanBtn">読み取り開始</button>
-<button id="resetBtn">最初に戻る</button>
-<h3>履歴</h3>
-<table id="history"></table>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
-<script>
-let step = 1;
-let mode = "normal";
-let firstCode1 = "";
-let firstCode2 = "";
-let secondCode = "";
-let firstHin = "";
-let secondHin = "";
-let scanning = false;
-
-// 音声
-const readSound = new Audio("sounds/yomitori.mp3");
-const successSound = new Audio("sounds/seikou.mp3");
-const errorSound = new Audio("sounds/keikoku.mp3");
-
-// IndexedDB
-let db;
-const req = indexedDB.open("checksDB", 1);
-req.onupgradeneeded = (e) => {
-    db = e.target.result;
-    db.createObjectStore("checks", { keyPath: "id", autoIncrement: true });
-};
-req.onsuccess = (e) => {
-    db = e.target.result;
-    loadHistory();
-};
-
-function setStatus(text, type="normal") {
-    const s = document.getElementById("status");
-    s.textContent = text;
-    s.className = type;
-}
-
-const codeReader = new ZXing.BrowserMultiFormatReader();
-const videoElement = document.getElementById('v');
-
 async function scan() {
     if (scanning) return;
     scanning = true;
     try {
-        // ▼ 解像度を上げてカメラ精度改善
         const constraints = {
             video: {
                 facingMode: "environment",
@@ -141,147 +12,48 @@ async function scan() {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         videoElement.srcObject = stream;
 
-        const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'v');
-        handleScan(result.text);
+        if (mode === "hinban") {
+            // canvasで枠内だけ切り取る
+            const frame = document.getElementById("scan-frame");
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+
+            // 枠のサイズをcanvasに設定
+            canvas.width = frame.offsetWidth;
+            canvas.height = frame.offsetHeight;
+
+            // videoの映像を枠内に合わせて描画
+            const rect = frame.getBoundingClientRect();
+            const videoRect = videoElement.getBoundingClientRect();
+            const scaleX = videoElement.videoWidth / videoRect.width;
+            const scaleY = videoElement.videoHeight / videoRect.height;
+
+            ctx.drawImage(
+                videoElement,
+                (rect.left - videoRect.left) * scaleX,
+                (rect.top - videoRect.top) * scaleY,
+                rect.width * scaleX,
+                rect.height * scaleY,
+                0,
+                0,
+                rect.width,
+                rect.height
+            );
+
+            // ここでcanvasから読み取る
+            const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+            const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
+            const result = codeReader.decode(binaryBitmap);
+            handleScan(result.text);
+        } else {
+            // 通常検品は全体から
+            const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'v');
+            handleScan(result.text);
+        }
+
         stopCamera();
     } catch (e) {
         alert("読み取り失敗: " + e.message);
         stopCamera();
     }
 }
-
-function stopCamera() {
-    const stream = videoElement.srcObject;
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    videoElement.srcObject = null;
-    scanning = false;
-}
-
-function handleScan(code) {
-    /* 通常検品（QRコード） */
-    if (mode === "normal") {
-        if (step === 1) {
-            if (code.length < 29) {
-                setStatus("バーコードが短すぎます（29文字未満）", "ng");
-                return;
-            }
-            readSound.play();
-            firstCode1 = code.substring(28, 38);
-            firstCode2 = code.substring(10, 20);
-            setStatus("読み取り完了 → パーツラベルのQRコードを読み取ってください", "normal");
-            step = 2;
-        } else if (step === 2) {
-            if (code.length < 34) {
-                setStatus("バーコードが短すぎます（34文字未満）", "ng");
-                return;
-            }
-            secondCode = code.substring(33, 43);
-            const ok = secondCode === firstCode1 || secondCode === firstCode2;
-            if (ok) {
-                setStatus("一致しました！", "ok");
-                successSound.play();
-            } else {
-                setStatus("不一致です", "ng");
-                errorSound.play();
-            }
-            saveResult(firstCode1 + " / " + firstCode2, secondCode, ok ? "OK" : "NG");
-            loadHistory();
-            document.getElementById("scanBtn").style.display = "none";
-            step = 3;
-        }
-        return;
-    }
-
-    /* 品番検品（バーコード） */
-    if (mode === "hinban") {
-        if (step === 1) {
-            if (code.length < 1) {
-                setStatus("コードが短すぎます", "ng");
-                return;
-            }
-            readSound.play();
-            firstHin = code.substring(0, 7);
-            setStatus("パーツラベルのバーコードを読み取ってください", "normal");
-            step = 2;
-            return;
-        }
-        if (step === 2) {
-            if (code.length < 10) {
-                setStatus("2回目は10文字以上必要です", "ng");
-                return;
-            }
-            secondHin = code.substring(0, 7);
-            const ok = firstHin === secondHin;
-            if (ok) {
-                setStatus("一致しました！", "ok");
-                successSound.play();
-            } else {
-                setStatus("不一致です", "ng");
-                errorSound.play();
-            }
-            saveResult(firstHin, secondHin, ok ? "OK" : "NG");
-            loadHistory();
-            document.getElementById("scanBtn").style.display = "none";
-            step = 3;
-            return;
-        }
-    }
-}
-
-function saveResult(first, second, result) {
-    const tx = db.transaction("checks", "readwrite");
-    tx.objectStore("checks").add({
-        time: new Date().toLocaleString(),
-        first,
-        second,
-        result
-    });
-}
-
-function loadHistory() {
-    const tx = db.transaction("checks", "readonly");
-    const req = tx.objectStore("checks").getAll();
-    req.onsuccess = () => {
-        const table = document.getElementById("history");
-        table.innerHTML =
-            `<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>`;
-        req.result.reverse().slice(0, 5).forEach(r => {
-            table.innerHTML +=
-                `<tr><td>${r.time}</td><td>${r.first}</td><td>${r.second}</td><td>${r.result}</td></tr>`;
-        });
-    };
-}
-
-function resetAll() {
-    step = 1;
-    firstCode1 = "";
-    firstCode2 = "";
-    secondCode = "";
-    firstHin = "";
-    secondHin = "";
-    if (mode === "normal") {
-        setStatus("現品票のQRコードを読み取ってください", "normal");
-    } else {
-        setStatus("品番ラベルのバーコードを読み取ってください", "normal");
-    }
-    document.getElementById("scanBtn").style.display = "block";
-}
-
-document.getElementById('scanBtn').addEventListener('click', scan);
-document.getElementById('resetBtn').addEventListener('click', resetAll);
-
-document.getElementById("modeSelect").addEventListener("change", (e) => {
-    mode = e.target.value;
-    resetAll();
-    const frame = document.getElementById("scan-frame");
-    if (mode === "normal") {
-        frame.className = "frame-normal";
-        setStatus("現品票のQRコードを読み取ってください", "normal");
-    } else {
-        frame.className = "frame-hinban";
-        setStatus("品番ラベルのバーコードを読み取ってください", "normal");
-    }
-});
-</script>
-</body>
-</html>
