@@ -89,6 +89,7 @@ video {
 <button id="resetBtn">最初に戻る</button>
 <h3>履歴</h3>
 <table id="history"></table>
+
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script>
 let step = 1;
@@ -99,10 +100,12 @@ let secondCode = "";
 let firstHin = "";
 let secondHin = "";
 let scanning = false;
+
 // 音声
 const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
+
 // IndexedDB
 let db;
 const req = indexedDB.open("checksDB", 1);
@@ -114,37 +117,88 @@ req.onsuccess = (e) => {
     db = e.target.result;
     loadHistory();
 };
+
 function setStatus(text, type="normal") {
     const s = document.getElementById("status");
     s.textContent = text;
     s.className = type;
 }
+
 const codeReader = new ZXing.BrowserMultiFormatReader();
 const videoElement = document.getElementById('v');
-async function scan() {
+
+async function scanWithRegion() {
     if (scanning) return;
     scanning = true;
+
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment" }
+            video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
         });
+
         videoElement.srcObject = stream;
-        const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'v');
-        handleScan(result.text);
-        stopCamera();
-    } catch (e) {
-        alert("読み取り失敗: " + e.message);
+
+        // Canvas 作成
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        const loop = async () => {
+            if (!scanning) return;
+
+            const vw = videoElement.videoWidth;
+            const vh = videoElement.videoHeight;
+            canvas.width = vw;
+            canvas.height = vh;
+            ctx.drawImage(videoElement, 0, 0, vw, vh);
+
+            // scan-frame の位置を取得
+            const frame = document.getElementById("scan-frame");
+            const rect = frame.getBoundingClientRect();
+            const videoRect = videoElement.getBoundingClientRect();
+
+            const sx = (rect.left - videoRect.left) * (vw / videoRect.width);
+            const sy = (rect.top - videoRect.top) * (vh / videoRect.height);
+            const sw = rect.width * (vw / videoRect.width);
+            const sh = rect.height * (vh / videoRect.height);
+
+            const imageData = ctx.getImageData(sx, sy, sw, sh);
+
+            try {
+                const luminanceSource = new ZXing.HTMLCanvasLuminanceSource(canvas);
+                const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
+                const result = codeReader.decode(binaryBitmap);
+                if (result) {
+                    handleScan(result.text);
+                    stopCamera();
+                    return;
+                }
+            } catch (err) {
+                // 読み取りできない場合は無視
+            }
+
+            requestAnimationFrame(loop);
+        };
+
+        loop();
+
+    } catch (error) {
+        alert("カメラ起動エラー：" + error.message);
         stopCamera();
     }
 }
+
 function stopCamera() {
     const stream = videoElement.srcObject;
     if (stream) stream.getTracks().forEach(t => t.stop());
     videoElement.srcObject = null;
     scanning = false;
 }
+
 function handleScan(code) {
-    /* ▼▼ 通常検品（QRコード） ▼▼ */
     if (mode === "normal") {
         if (step === 1) {
             if (code.length < 29) {
@@ -162,9 +216,7 @@ function handleScan(code) {
                 return;
             }
             secondCode = code.substring(33, 43);
-            const ok =
-                secondCode === firstCode1 ||
-                secondCode === firstCode2;
+            const ok = secondCode === firstCode1 || secondCode === firstCode2;
             if (ok) {
                 setStatus("一致しました！", "ok");
                 successSound.play();
@@ -179,9 +231,8 @@ function handleScan(code) {
         }
         return;
     }
-    /* ▼▼ 品番検品（バーコード） ▼▼ */
+
     if (mode === "hinban") {
-        // ---- 1回目 ----
         if (step === 1) {
             if (code.length < 1) {
                 setStatus("コードが短すぎます", "ng");
@@ -193,7 +244,6 @@ function handleScan(code) {
             step = 2;
             return;
         }
-        // ---- 2回目 ----
         if (step === 2) {
             if (code.length < 10) {
                 setStatus("2回目は10文字以上必要です", "ng");
@@ -216,6 +266,7 @@ function handleScan(code) {
         }
     }
 }
+
 function saveResult(first, second, result) {
     const tx = db.transaction("checks", "readwrite");
     tx.objectStore("checks").add({
@@ -225,6 +276,7 @@ function saveResult(first, second, result) {
         result
     });
 }
+
 function loadHistory() {
     const tx = db.transaction("checks", "readonly");
     const req = tx.objectStore("checks").getAll();
@@ -238,6 +290,7 @@ function loadHistory() {
         });
     };
 }
+
 function resetAll() {
     step = 1;
     firstCode1 = "";
@@ -252,7 +305,8 @@ function resetAll() {
     }
     document.getElementById("scanBtn").style.display = "block";
 }
-document.getElementById('scanBtn').addEventListener('click', scan);
+
+document.getElementById('scanBtn').addEventListener('click', scanWithRegion);
 document.getElementById('resetBtn').addEventListener('click', resetAll);
 document.getElementById("modeSelect").addEventListener("change", (e) => {
     mode = e.target.value;
@@ -269,4 +323,3 @@ document.getElementById("modeSelect").addEventListener("change", (e) => {
 </script>
 </body>
 </html>
-
