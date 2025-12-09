@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>QR検品システム（完全版）</title>
+<title>手入力検品</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -63,9 +63,9 @@ video { width: 100%; border-radius: 10px; }
 </head>
 <body>
 
-<h2>📦 QR検品システム（強化版）</h2>
+<h2>📦 手入力検品システム</h2>
 
-<div id="status" class="normal">① 最初に番号を手入力してください</div>
+<div id="status" class="normal">① 最初に品番を手入力してください</div>
 <input id="manualInput" type="text" placeholder="例：ABC123456" autofocus maxlength="50">
 
 <div id="video-container">
@@ -79,6 +79,13 @@ video { width: 100%; border-radius: 10px; }
 
 <h3>📍 検品履歴</h3>
 <table id="history"></table>
+
+  <!-- ▼ ページ切替ナビ ▼ -->
+<div class="navbar">
+    <a href="index.html" >📷 QR検品</a>
+    <a href="tenyuryoku.html"　class="active">⌨ 手入力検品</a>
+</div>
+
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
 
@@ -250,12 +257,6 @@ document.getElementById("startScanBtn").addEventListener("click", startScan);
 document.getElementById("resetBtn").addEventListener("click", ()=>location.reload());
 
 </script>
-
-<!-- === フッターメニュー === -->
-<div class="footer-menu">
-    <a href="index.html">ホーム</a>
-    <a href="tenyuryoku.html">手入力</a>
-</div>
-
 </body>
 </html>
+
