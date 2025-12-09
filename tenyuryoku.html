@@ -73,12 +73,12 @@ function setStatus(txt, type="normal") {
     s.className = type;
 }
 
-// ---- カメラ処理 ----
-
-const codeReader = new ZXing.BrowserQRCodeReader();
-const videoElement = document.getElementById('v');
+// ---- カメラ強化版 ----
+const codeReader = new ZXing.BrowserMultiFormatReader();
+const videoElement = document.getElementById("v");
 
 async function startScan() {
+
     if (firstInput === "") {
         alert("先に1回目の番号を入力してください！");
         return;
@@ -88,15 +88,60 @@ async function startScan() {
     scanning = true;
 
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }});
-        videoElement.srcObject = stream;
-        
-        const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'v');
-        secondScan = result.text;
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
+        });
 
-        readSound.play();
-        stopCamera();
-        compareCodes();
+        videoElement.srcObject = stream;
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        async function scanLoop() {
+            if (!scanning) return;
+
+            const vw = videoElement.videoWidth;
+            const vh = videoElement.videoHeight;
+
+            canvas.width = vw;
+            canvas.height = vh;
+
+            ctx.drawImage(videoElement, 0, 0, vw, vh);
+
+            const frame = document.getElementById("scan-frame");
+            const rect = frame.getBoundingClientRect();
+            const videoRect = videoElement.getBoundingClientRect();
+
+            const sx = (rect.left - videoRect.left) * (vw / videoRect.width);
+            const sy = (rect.top - videoRect.top) * (vh / videoRect.height);
+            const sw = rect.width * (vw / videoRect.width);
+            const sh = rect.height * (vh / videoRect.height);
+
+            const sub = ctx.getImageData(sx, sy, sw, sh);
+
+            try {
+                const luminance = new ZXing.RGBLuminanceSource(sub.data, sw, sh);
+                const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
+                const result = codeReader.decode(bitmap);
+
+                if (result && result.text) {
+                    secondScan = result.text;
+                    readSound.play();
+                    stopCamera();
+                    compareCodes();
+                    return;
+                }
+
+            } catch(err) {}
+
+            requestAnimationFrame(scanLoop);
+        }
+
+        scanLoop();
 
     } catch(err) {
         alert("カメラエラー: " + err.message);
@@ -152,7 +197,9 @@ function loadHistory() {
         table.innerHTML = `<tr><th>時刻</th><th>手入力</th><th>QR</th><th>結果</th></tr>`;
         
         req.result.reverse().slice(0,10).forEach(r => {
-            table.innerHTML += `<tr><td>${r.time}</td><td>${r.first}</td><td>${r.second}</td><td>${r.result}</td></tr>`;
+            table.innerHTML += `<tr>
+                <td>${r.time}</td><td>${r.first}</td><td>${r.second}</td><td>${r.result}</td>
+            </tr>`;
         });
     };
 }
