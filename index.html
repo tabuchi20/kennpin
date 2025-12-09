@@ -3,92 +3,56 @@
 <head>
 <!-- 通常のfavicon -->
 <link rel="icon" href="icon/favicon.png" type="image/png">
-<!-- iPhone（ホーム画面追加）のアイコン -->
 <link rel="apple-touch-icon" href="icon/icon-180.png">
-<!-- Android / PWA 用アイコン -->
 <link rel="manifest" href="manifest.webmanifest">
 
 <meta charset="UTF-8" />
 <title>QRコード検品 Webアプリ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
-body {
-    font-family: -apple-system, BlinkMacSystemFont;
-    padding: 20px;
-    position: relative;
-}
-#status {
-    padding: 20px;
-    font-size: 24px;
-    font-weight: bold;
-    border-radius: 12px;
-    text-align: center;
-    margin-bottom: 20px;
-}
+body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; }
+#status { padding: 20px; font-size: 24px; font-weight: bold; border-radius: 12px; text-align: center; margin-bottom: 20px; }
 .ok { background: green; color: white; }
 .ng { background: red; color: white; }
 .normal { background: #e5e5e5; color: #0066cc; }
-button {
-    width: 100%;
-    font-size: 20px;
-    padding: 15px;
-    margin-top: 20px;
-    border-radius: 10px;
-}
-table {
-    width: 100%;
-    margin-top: 20px;
-    border-collapse: collapse;
-}
-th, td {
-    border-bottom: 1px solid #ddd;
-    padding: 8px;
-}
-#video-container {
-    position: relative;
-    width: 100%;
-    max-width: 400px;
-    margin: 20px 0;
-}
-video {
-    width: 100%;
-    border-radius: 12px;
-}
-#scan-frame {
-    position: absolute;
-    top: 50%; left: 50%;
-    width: 180px; height: 180px;
-    margin-left: -90px;
-    margin-top: -90px;
-    border: 3px solid rgba(0,200,0,0.7);
-    border-radius: 12px;
-    pointer-events: none;
-    box-sizing: border-box;
-}
+button { width: 100%; font-size: 20px; padding: 15px; margin-top: 20px; border-radius: 10px; }
+table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+th, td { border-bottom: 1px solid #ddd; padding: 8px; }
+#video-container { max-width: 400px; margin: 20px 0; position: relative; }
+video { width: 100%; border-radius: 12px; }
+#scan-frame { position: absolute; top: 50%; left: 50%; width: 180px; height: 180px; margin-left: -90px; margin-top: -90px; border: 3px solid rgba(0,200,0,0.7); border-radius: 12px; pointer-events: none; }
 </style>
 </head>
 <body>
+
 <h2>QRコード検品 Webアプリ</h2>
 <div id="status" class="normal">現品票のQRコードを読み取ってください</div>
+
 <div id="video-container">
     <video id="v" autoplay playsinline></video>
     <div id="scan-frame"></div>
 </div>
+
 <button id="scanBtn">QRコードを読み取る</button>
 <button id="resetBtn">最初に戻る</button>
+<button id="exportBtn">CSV出力</button>  <!-- ★追加 -->
+
 <h3>履歴</h3>
 <table id="history"></table>
+
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
+
 <script>
 let step = 1;
 let firstCode1 = "";
 let firstCode2 = "";
 let secondCode = "";
 let scanning = false;
-// 音声
-const readSound = new Audio("sounds/yomitori.mp3"); // 1回目読み取り音
-const successSound = new Audio("sounds/seikou.mp3"); // ピンポーン音
-const errorSound = new Audio("sounds/keikoku.mp3"); // ブブー音
+
+const readSound = new Audio("sounds/yomitori.mp3");
+const successSound = new Audio("sounds/seikou.mp3");
+const errorSound = new Audio("sounds/keikoku.mp3");
+
 let db;
 const req = indexedDB.open("checksDB", 1);
 req.onupgradeneeded = (e) => {
@@ -99,14 +63,17 @@ req.onsuccess = (e) => {
     db = e.target.result;
     loadHistory();
 };
+
 function setStatus(text, type="normal") {
     const s = document.getElementById("status");
     s.textContent = text;
     s.className = type;
 }
+
 const codeReader = new ZXing.BrowserQRCodeReader();
 const videoElement = document.getElementById('v');
 const frame = document.getElementById('scan-frame');
+
 async function scan() {
     if (scanning) return;
     scanning = true;
@@ -123,24 +90,24 @@ async function scan() {
         stopCamera();
     }
 }
+
 function stopCamera() {
     scanning = false;
     const stream = videoElement.srcObject;
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-    }
+    if (stream) stream.getTracks().forEach(track => track.stop());
     videoElement.srcObject = null;
 }
+
 function handleScan(code) {
     if (step === 1) {
         if (code.length < 29) {
             setStatus("バーコードが短すぎます（29文字未満）", "ng");
             return;
         }
-        readSound.play(); // ★1回目読み取り音
+        readSound.play();
         firstCode1 = code.substring(28, 38);
         firstCode2 = code.length >= 20 ? code.substring(10, 20) : "";
-        setStatus("読み取り完了 → パーツラベルのQRコードを読み取ってください", "normal");
+        setStatus("読み取り完了 → パーツラベルを読み取ってください", "normal");
         step = 2;
     } else if (step === 2) {
         if (code.length < 34) {
@@ -151,20 +118,18 @@ function handleScan(code) {
         let matchOK = (secondCode === firstCode1) || (firstCode2 !== "" && secondCode === firstCode2);
         if (matchOK) {
             setStatus("一致しました！", "ok");
-            successSound.play(); // ピンポーン
-            frame.style.borderColor = 'green';
+            successSound.play();
         } else {
             setStatus("不一致です", "ng");
-            errorSound.play(); // ブブー
-            frame.style.borderColor = 'red';
+            errorSound.play();
         }
         saveResult(firstCode1 + (firstCode2 ? " / " + firstCode2 : ""), secondCode, matchOK ? "OK" : "NG");
         loadHistory();
-        // ★2回目完了 → scanボタンを隠す
         document.getElementById("scanBtn").style.display = "none";
         step = 3;
     }
 }
+
 function saveResult(first, second, result) {
     const tx = db.transaction("checks", "readwrite");
     tx.objectStore("checks").add({
@@ -174,6 +139,7 @@ function saveResult(first, second, result) {
         result
     });
 }
+
 function loadHistory() {
     const tx = db.transaction("checks", "readonly");
     const req = tx.objectStore("checks").getAll();
@@ -185,18 +151,41 @@ function loadHistory() {
         });
     };
 }
+
 function resetAll() {
     step = 1;
     firstCode1 = "";
     firstCode2 = "";
     secondCode = "";
     setStatus("現品票のQRコードを読み取ってください", "normal");
-    frame.style.borderColor = 'rgba(0,200,0,0.7)';
-    // ★最初に戻る → scanボタンを復活
     document.getElementById("scanBtn").style.display = "block";
 }
-document.getElementById('scanBtn').addEventListener('click', scan);
-document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+/* ★★★ CSVエクスポート機能追加 ★★★ */
+function exportCSV() {
+    const tx = db.transaction("checks", "readonly");
+    const req = tx.objectStore("checks").getAll();
+    req.onsuccess = () => {
+        let rows = [["時刻", "1回目", "2回目", "結果"]];
+        req.result.forEach(r => rows.push([r.time, r.first, r.second, r.result]));
+
+        let csvContent = rows.map(e => e.join(",")).join("\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `検品履歴_${new Date().toLocaleDateString()}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+}
+
+document.getElementById("scanBtn").addEventListener("click", scan);
+document.getElementById("resetBtn").addEventListener("click", resetAll);
+document.getElementById("exportBtn").addEventListener("click", exportCSV); // ★追加
+
 </script>
 </body>
 </html>
