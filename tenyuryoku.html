@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>QR検品（手入力 → カメラ照合 強化版）</title>
+<title>QR検品（iPhone対応強化版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -34,7 +34,7 @@ video { width: 100%; border-radius: 10px; }
 </head>
 <body>
 
-<h2>QR検品システム（強化カメラ）</h2>
+<h2>QR検品システム（iPhone強化版）</h2>
 
 <div id="status" class="normal">1回目の番号を入力してください</div>
 
@@ -45,7 +45,7 @@ video { width: 100%; border-radius: 10px; }
     <div id="scan-frame"></div>
 </div>
 
-<button id="startScanBtn">2回目 QR読み取り開始</button>
+<button id="startScanBtn">📷 2回目 QR読み取り開始</button>
 <button id="resetBtn">リセット</button>
 <button id="exportBtn">CSV出力</button>
 
@@ -55,20 +55,33 @@ video { width: 100%; border-radius: 10px; }
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 
 <script>
-// ---- 状態管理 ----
+// ======== Safari / iPhone対応 Polyfill =========
+if (!navigator.mediaDevices) navigator.mediaDevices = {};
+
+if (!navigator.mediaDevices.getUserMedia) {
+    navigator.mediaDevices.getUserMedia = function(constraints) {
+        const getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+        if (!getUserMedia) {
+            return Promise.reject(new Error("ブラウザがカメラをサポートしていません"));
+        }
+        return new Promise((resolve, reject) => getUserMedia.call(navigator, constraints, resolve, reject));
+    };
+}
+
+// ======== 状態管理 ========
 let firstInput = "";
 let scanning = false;
 let detected = false;
 
-// ---- ZXing Reader ----
+// ZXing Reader
 const reader = new ZXing.BrowserMultiFormatReader();
 
-// ---- サウンド ----
+// ======== 効果音 ========
 const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
-// ---- IndexedDB ----
+// ======== IndexedDB ========
 let db;
 const req = indexedDB.open("checksDB_manual", 1);
 
@@ -87,15 +100,12 @@ function setStatus(txt, type="normal") {
     s.className = type;
 }
 
-// ---- カメラ制御 ----
+// ======== カメラ制御 ========
 const video = document.getElementById("camera");
 const scanFrame = document.getElementById("scan-frame");
 
 async function startScan() {
-    if (!firstInput) {
-        alert("先に番号を入力してください！");
-        return;
-    }
+    if (!firstInput) return alert("先に番号を入力してください！");
     if (scanning) return;
 
     scanning = true;
@@ -103,19 +113,16 @@ async function startScan() {
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: "environment",
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            }
+            video: { facingMode: { ideal: "environment" } }
         });
 
         video.srcObject = stream;
-        setStatus("QRコードを枠内に合わせてください", "normal");
+        setStatus("📌 QRコードを枠に合わせてください", "normal");
 
-        scanLoop();
+        requestAnimationFrame(scanLoop);
+
     } catch (err) {
-        alert("カメラエラー: " + err.message);
+        alert("⚠ カメラエラー: " + err.message + "\nSafariのカメラ設定を確認してください。");
         stopCamera();
     }
 }
@@ -127,27 +134,27 @@ function stopCamera() {
     video.srcObject = null;
 }
 
+// ======== スキャン処理 ========
 function scanLoop() {
     if (!scanning || detected) return;
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
 
-    const frameRect = scanFrame.getBoundingClientRect();
-    const videoRect = video.getBoundingClientRect();
+    const f = scanFrame.getBoundingClientRect();
+    const v = video.getBoundingClientRect();
 
-    canvas.width = frameRect.width;
-    canvas.height = frameRect.height;
+    canvas.width = f.width;
+    canvas.height = f.height;
 
-    const sx = (frameRect.left - videoRect.left) * (video.videoWidth / videoRect.width);
-    const sy = (frameRect.top - videoRect.top) * (video.videoHeight / videoRect.height);
-    const sWidth = frameRect.width * (video.videoWidth / videoRect.width);
-    const sHeight = frameRect.height * (video.videoHeight / videoRect.height);
+    const sx = (f.left - v.left) * (video.videoWidth / v.width);
+    const sy = (f.top - v.top) * (video.videoHeight / v.height);
+    const sw = f.width * (video.videoWidth / v.width);
+    const sh = f.height * (video.videoHeight / v.height);
 
-    ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-    reader.decodeFromImage(canvas)
-    .then(result => processScan(result.text))
+    reader.decodeFromCanvas(canvas).then(result => processScan(result.text))
     .catch(() => requestAnimationFrame(scanLoop));
 }
 
@@ -157,27 +164,22 @@ function processScan(code) {
     readSound.play();
     stopCamera();
 
-    const match = code.includes(firstInput);
+    const ok = code.includes(firstInput);
 
-    if (match) {
-        setStatus("一致しました！", "ok");
-        successSound.play();
-    } else {
-        setStatus(`不一致: ${code}`, "ng");
-        errorSound.play();
-    }
+    setStatus(ok ? "✔ 一致しました！" : `❌ 不一致：${code}`, ok ? "ok" : "ng");
+    ok ? successSound.play() : errorSound.play();
 
-    saveResult(firstInput, code, match ? "OK" : "NG");
+    saveResult(firstInput, code, ok ? "OK" : "NG");
     loadHistory();
 }
 
-// ---- 入力 ----
+// ======== 入力検知 ========
 document.getElementById("manualInput").addEventListener("change", () => {
     firstInput = manualInput.value.trim();
-    if (firstInput !== "") setStatus("次にQRを読み取ってください", "normal");
+    if (firstInput) setStatus("次にQRを読み取ってください", "normal");
 });
 
-// ---- DB保存 ----
+// ======== DB保存 ========
 function saveResult(first, second, result) {
     const tx = db.transaction("checks", "readwrite");
     tx.objectStore("checks").add({
@@ -186,7 +188,7 @@ function saveResult(first, second, result) {
     });
 }
 
-// ---- 履歴読み込み ----
+// ======== 履歴表示 ========
 function loadHistory() {
     const tx = db.transaction("checks", "readonly");
     const req = tx.objectStore("checks").getAll();
@@ -200,14 +202,14 @@ function loadHistory() {
     };
 }
 
-// ---- CSV ----
+// ======== CSV出力 ========
 document.getElementById("exportBtn").addEventListener("click", () => {
     const tx = db.transaction("checks", "readonly");
     const req = tx.objectStore("checks").getAll();
 
     req.onsuccess = () => {
         const rows = [["時刻","入力値","QR値","結果"], ...req.result.map(r => [r.time,r.first,r.second,r.result])];
-        const blob = new Blob([rows.map(r => r.join(",")).join("\n")], { type: "text/csv" });
+        const blob = new Blob([rows.map(r => r.join(",")).join("\n")], { type:"text/csv" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = "検品履歴.csv";
@@ -215,7 +217,7 @@ document.getElementById("exportBtn").addEventListener("click", () => {
     };
 });
 
-// ---- ボタン ----
+// ======== ボタン ========
 document.getElementById("startScanBtn").addEventListener("click", startScan);
 document.getElementById("resetBtn").addEventListener("click", () => location.reload());
 </script>
