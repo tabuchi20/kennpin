@@ -9,7 +9,7 @@
 body { 
   font-family: -apple-system, BlinkMacSystemFont; 
   padding: 20px; background:#f5f5f5; 
-  margin-bottom: 90px; /* ←フッターと重ならないよう余白追加 */
+  margin-bottom: 90px;
 }
 
 #status { padding: 20px; font-size: 22px; font-weight: bold; border-radius: 10px; text-align: center; margin-bottom: 20px; }
@@ -37,27 +37,30 @@ video { width: 100%; border-radius: 10px; }
   border-radius: 10px;
 }
 
-/* ===== フッターメニュー ===== */
-.footer-menu {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  display: flex;
-  background: #eee;
-  border-top: 2px solid #ccc;
+/* ===== 共通フッターナビ ===== */
+.navbar {
+    position:fixed;
+    bottom:0;
+    left:0;
+    width:100%;
+    background:#f3f3f3;
+    border-top:2px solid #ccc;
+    display:flex;
+    justify-content:space-around;
+    z-index:9999;
 }
-.footer-menu a {
-  flex: 1;
-  text-align: center;
-  padding: 15px;
-  font-size: 18px;
-  text-decoration: none;
-  color: #333;
-  border-right: 1px solid #ccc;
+.navbar a {
+    flex:1;
+    text-align:center;
+    padding:15px 0;
+    font-size:18px;
+    text-decoration:none;
+    color:#333;
 }
-.footer-menu a:last-child {
-  border-right: none;
+.navbar a.active {
+    background:#0078ff;
+    color:white;
+    font-weight:bold;
 }
 </style>
 </head>
@@ -80,12 +83,11 @@ video { width: 100%; border-radius: 10px; }
 <h3>📍 検品履歴</h3>
 <table id="history"></table>
 
-  <!-- ▼ ページ切替ナビ ▼ -->
+<!-- ▼ フッターメニュー（index.htmlと同じ仕様） -->
 <div class="navbar">
-    <a href="index.html" >📷 QR検品</a>
-    <a href="tenyuryoku.html"　class="active">⌨ 手入力検品</a>
+    <a href="index.html">📷 QR検品</a>
+    <a href="tenyuryoku.html" class="active">⌨ 手入力検品</a>
 </div>
-
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
 
@@ -259,4 +261,3 @@ document.getElementById("resetBtn").addEventListener("click", ()=>location.reloa
 </script>
 </body>
 </html>
-
