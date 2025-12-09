@@ -35,6 +35,9 @@ video { width: 100%; border-radius: 10px; }
 
 <h2>📦 QR検品システム（強化版）</h2>
 
+<!-- 🔽追加部分 -->
+<button onclick="location.href='index.html'">🔁 スキャン画面へ戻る</button>
+
 <div id="status" class="normal">① 最初に番号を手入力してください</div>
 <input id="manualInput" type="text" placeholder="例：ABC123456" autofocus maxlength="50">
 
@@ -105,21 +108,20 @@ async function startScan() {
   detected = false;
 
   try {
-   const stream = await navigator.mediaDevices.getUserMedia({
-  video: {
-    facingMode: { ideal: "environment" },
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
-    focusMode: "continuous",
-    advanced: [
-      { focusMode: "continuous" },
-      { exposureMode: "continuous" },
-      { contrast: 1.5 },
-      { zoom: 2 }  // ←これでQRを大きく撮れる
-    ]
-  }
-});
-
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        focusMode: "continuous",
+        advanced: [
+          { focusMode: "continuous" },
+          { exposureMode: "continuous" },
+          { contrast: 1.5 },
+          { zoom: 2 }
+        ]
+      }
+    });
 
     video.srcObject = stream;
     setStatus("枠内にQRコードを合わせてください","normal");
@@ -137,7 +139,6 @@ function stopCamera() {
   video.srcObject = null;
 }
 
-// ========= QR枠内スキャン処理 =========
 function scanLoop() {
   if (!scanning || detected) return;
 
@@ -173,7 +174,6 @@ function scanLoop() {
   }
 }
 
-// ========= 判定処理 =========
 function compare(scanned) {
   if (scanned.includes(firstInput)) {
     setStatus("一致しました！", "ok");
@@ -186,7 +186,6 @@ function compare(scanned) {
   }
 }
 
-// ========= 入力イベント =========
 document.getElementById("manualInput").addEventListener("input", e=>{
   firstInput = e.target.value.trim();
   if (firstInput) setStatus("次にQRコードを読み取ってください","normal");
@@ -232,4 +231,3 @@ document.getElementById("resetBtn").addEventListener("click", ()=>location.reloa
 </script>
 </body>
 </html>
-
