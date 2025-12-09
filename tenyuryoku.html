@@ -2,228 +2,131 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>QR検品（手入力 → カメラ照合）</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<title>バーコードスキャナー</title>
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; }
-#status { padding: 20px; font-size: 22px; font-weight: bold; border-radius: 10px; text-align: center; margin-bottom: 20px; }
-.ok { background: green; color: white; }
-.ng { background: red; color: white; }
-.normal { background: #e8e8e8; color: #003366; }
-input { width: 100%; font-size: 24px; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #888; }
-button { width: 100%; font-size: 20px; padding: 15px; margin-top: 10px; border-radius: 10px; }
-table { width: 100%; margin-top: 20px; border-collapse: collapse; }
-th, td { border-bottom: 1px solid #ddd; padding: 6px; }
-#video-container { width: 100%; max-width: 400px; margin: 20px auto; position: relative; }
-video { width: 100%; border-radius: 12px; }
-#scan-frame { position: absolute; top: 50%; left: 50%; width: 160px; height: 160px; margin-left: -80px; margin-top: -80px; border: 3px solid rgba(0,200,0,0.8); border-radius: 12px; }
+    video {
+        width: 100%;
+        max-width: 400px;
+        border: 2px solid black;
+        border-radius: 10px;
+    }
+
+    #scan-frame {
+        width: 220px;
+        height: 220px;
+        border: 3px solid red;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+    }
+
+    #output {
+        margin-top: 15px;
+        font-size: 18px;
+        font-weight: bold;
+    }
 </style>
 </head>
+
 <body>
 
-<h2>QR検品システム（手入力 → カメラ照合）</h2>
+<h2>バーコード読み取り</h2>
 
-<div id="status" class="normal">1回目の番号を入力してください</div>
-
-<input id="manualInput" type="text" placeholder="例：1234567890" autofocus maxlength="20">
-
-<div id="video-container">
-    <video id="v" autoplay playsinline></video>
+<div style="position: relative; width:400px;">
+    <video id="camera" autoplay playsinline></video>
     <div id="scan-frame"></div>
 </div>
 
-<button id="startScanBtn">2回目 QR読み取り</button>
-<button id="resetBtn">リセット</button>
-<button id="exportBtn">CSV出力</button>
+<br>
+<button id="exportBtn" disabled>CSV出力</button>
+<div id="output">読み取り結果：なし</div>
 
-<h3>履歴</h3>
-<table id="history"></table>
-
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
-
+<script src="https://unpkg.com/@zxing/library@latest"></script>
 <script>
-// ---- 状態管理 ----
-let firstInput = "";
-let secondScan = "";
-let scanning = false;
+const video = document.getElementById("camera");
+const outputDiv = document.getElementById("output");
+const scanFrame = document.getElementById("scan-frame");
+const exportBtn = document.getElementById("exportBtn");
 
-// ---- サウンド ----
-const readSound = new Audio("sounds/yomitori.mp3");
-const successSound = new Audio("sounds/seikou.mp3");
-const errorSound = new Audio("sounds/keikoku.mp3");
+const reader = new ZXing.BrowserMultiFormatReader();
+let results = [];
+let scanning = true;
 
-// ---- IndexedDB ----
-let db;
-const req = indexedDB.open("checksDB_manual", 1);
+// ====== CSV出力 ======
+exportBtn.addEventListener("click", () => {
+    const csvContent = "data:text/csv;charset=utf-8," +
+        results.map(row => row).join("\n");
 
-req.onupgradeneeded = (e) => {
-    db = e.target.result;
-    db.createObjectStore("checks", { keyPath: "id", autoIncrement: true });
-};
+    const link = document.createElement("a");
+    link.href = encodeURI(csvContent);
+    link.download = "barcode_results.csv";
+    link.click();
+});
 
-req.onsuccess = (e) => {
-    db = e.target.result;
-    loadHistory();
-};
-
-function setStatus(txt, type="normal") {
-    const s = document.getElementById("status");
-    s.textContent = txt;
-    s.className = type;
-}
-
-// ---- カメラ強化版 ----
-const codeReader = new ZXing.BrowserMultiFormatReader();
-const videoElement = document.getElementById("v");
-
-async function startScan() {
-
-    if (firstInput === "") {
-        alert("先に1回目の番号を入力してください！");
-        return;
-    }
-
-    if (scanning) return;
-    scanning = true;
-
+async function startCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
             video: {
-                facingMode: { ideal: "environment" },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
+                facingMode: "environment",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
             }
         });
 
-        videoElement.srcObject = stream;
+        video.srcObject = stream;
+        video.onloadedmetadata = () => video.play();
 
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-
-        async function scanLoop() {
-            if (!scanning) return;
-
-            const vw = videoElement.videoWidth;
-            const vh = videoElement.videoHeight;
-
-            canvas.width = vw;
-            canvas.height = vh;
-
-            ctx.drawImage(videoElement, 0, 0, vw, vh);
-
-            const frame = document.getElementById("scan-frame");
-            const rect = frame.getBoundingClientRect();
-            const videoRect = videoElement.getBoundingClientRect();
-
-            const sx = (rect.left - videoRect.left) * (vw / videoRect.width);
-            const sy = (rect.top - videoRect.top) * (vh / videoRect.height);
-            const sw = rect.width * (vw / videoRect.width);
-            const sh = rect.height * (vh / videoRect.height);
-
-            const sub = ctx.getImageData(sx, sy, sw, sh);
-
-            try {
-                const luminance = new ZXing.RGBLuminanceSource(sub.data, sw, sh);
-                const bitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
-                const result = codeReader.decode(bitmap);
-
-                if (result && result.text) {
-                    secondScan = result.text;
-                    readSound.play();
-                    stopCamera();
-                    compareCodes();
-                    return;
-                }
-
-            } catch(err) {}
-
-            requestAnimationFrame(scanLoop);
-        }
-
-        scanLoop();
-
-    } catch(err) {
-        alert("カメラエラー: " + err.message);
-        stopCamera();
+        startScanning();
+    } catch (err) {
+        alert("カメラが使用できません: " + err);
     }
 }
 
-function stopCamera() {
-    scanning = false;
-    const stream = videoElement.srcObject;
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    videoElement.srcObject = null;
-}
+function startScanning() {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
 
-// ---- 入力処理 ----
-document.getElementById("manualInput").addEventListener("change", () => {
-    firstInput = manualInput.value.trim();
-    if (firstInput !== "") setStatus("次に QRコードを読み取ってください", "normal");
-});
+    async function scanLoop() {
+        if (!scanning) return;
 
-// ---- 判定 ----
-function compareCodes() {
-    const match = secondScan.includes(firstInput);
+        canvas.width = scanFrame.offsetWidth;
+        canvas.height = scanFrame.offsetHeight;
 
-    if (match) {
-        setStatus("一致しました！", "ok");
-        successSound.play();
-    } else {
-        setStatus("不一致です！", "ng");
-        errorSound.play();
+        const videoRect = video.getBoundingClientRect();
+        const frameRect = scanFrame.getBoundingClientRect();
+
+        const sx = (frameRect.left - videoRect.left) * (video.videoWidth / videoRect.width);
+        const sy = (frameRect.top - videoRect.top) * (video.videoHeight / videoRect.height);
+        const sWidth = canvas.width * (video.videoWidth / videoRect.width);
+        const sHeight = canvas.height * (video.videoHeight / videoRect.height);
+
+        ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+
+        try {
+            const result = await reader.decodeFromImageUrl(canvas.toDataURL());
+            if (result && result.text) {
+                addResult(result.text);
+            }
+        } catch {}
+
+        requestAnimationFrame(scanLoop);
     }
 
-    saveResult(firstInput, secondScan, match ? "OK" : "NG");
-    loadHistory();
+    scanLoop();
 }
 
-// ---- IndexedDB保存 ----
-function saveResult(first, second, result) {
-    const tx = db.transaction("checks", "readwrite");
-    tx.objectStore("checks").add({
-        time: new Date().toLocaleString(),
-        first, second, result
-    });
+function addResult(code) {
+    if (!results.includes(code)) {
+        results.push(code);
+        exportBtn.disabled = false;
+    }
+    outputDiv.textContent = "読み取り結果：" + code;
 }
 
-// ---- 履歴表示 ----
-function loadHistory() {
-    const tx = db.transaction("checks", "readonly");
-    const req = tx.objectStore("checks").getAll();
-
-    req.onsuccess = () => {
-        const table = document.getElementById("history");
-        table.innerHTML = `<tr><th>時刻</th><th>手入力</th><th>QR</th><th>結果</th></tr>`;
-        
-        req.result.reverse().slice(0,10).forEach(r => {
-            table.innerHTML += `<tr>
-                <td>${r.time}</td><td>${r.first}</td><td>${r.second}</td><td>${r.result}</td>
-            </tr>`;
-        });
-    };
-}
-
-// ---- CSV出力 ----
-function exportCSV() {
-    const tx = db.transaction("checks", "readonly");
-    const req = tx.objectStore("checks").getAll();
-
-    req.onsuccess = () => {
-        const rows = [["時刻","入力値","QR値","結果"], ...req.result.map(r => [r.time,r.first,r.second,r.result])];
-        const blob = new Blob([rows.map(r => r.join(",")).join("\n")], { type: "text/csv" });
-
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "検品履歴.csv";
-        a.click();
-    };
-}
-
-// ---- ボタン動作 ----
-document.getElementById("startScanBtn").addEventListener("click", startScan);
-document.getElementById("resetBtn").addEventListener("click", () => location.reload());
-document.getElementById("exportBtn").addEventListener("click", exportCSV);
+startCamera();
 </script>
+
 </body>
 </html>
