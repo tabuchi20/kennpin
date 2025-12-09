@@ -211,7 +211,7 @@ function compare(scanned) {
     beepOk.play();
     saveResult(firstInput, scanned, "OK");
   } else {
-    setStatus("不一致: " + scanned, "ng");
+    setStatus("不一致です！ " , "ng");
     beepNg.play();
     saveResult(firstInput, scanned, "NG");
   }
@@ -261,3 +261,4 @@ document.getElementById("resetBtn").addEventListener("click", ()=>location.reloa
 </script>
 </body>
 </html>
+
