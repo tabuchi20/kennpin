@@ -2,196 +2,233 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>QR検品（手動フォーカス + 安定読み取り）</title>
+<title>QR検品システム（完全版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; }
+body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; background:#f5f5f5; }
 #status { padding: 20px; font-size: 22px; font-weight: bold; border-radius: 10px; text-align: center; margin-bottom: 20px; }
 .ok { background: green; color: white; }
 .ng { background: red; color: white; }
 .normal { background: #e8e8e8; color: #003366; }
 input { width: 100%; font-size: 24px; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #888; }
 button { width: 100%; font-size: 20px; padding: 15px; margin-top: 10px; border-radius: 10px; }
+table { width: 100%; margin-top: 20px; border-collapse: collapse; background:white; }
+th, td { border-bottom: 1px solid #ddd; padding: 6px; }
 
 #video-container { position: relative; width: 100%; max-width: 400px; margin: auto; }
 video { width: 100%; border-radius: 10px; }
 
 #scan-frame {
-    width: 220px; height: 220px;
-    border: 3px solid rgba(255,0,0,0.8);
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    border-radius: 10px;
+  width: 220px;
+  height: 220px;
+  border: 3px solid rgba(255,0,0,0.8);
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: 10px;
 }
 </style>
 </head>
 <body>
 
-<h2>📦 QR検品システム（安定版）</h2>
+<h2>📦 QR検品システム（強化版）</h2>
 
-<div id="status" class="normal">1回目の番号を入力してください</div>
-
-<input id="manualInput" type="text" placeholder="例：1234567890" autofocus maxlength="30">
+<div id="status" class="normal">① 最初に番号を手入力してください</div>
+<input id="manualInput" type="text" placeholder="例：ABC123456" autofocus maxlength="50">
 
 <div id="video-container">
-    <video id="camera" autoplay playsinline></video>
-    <div id="scan-frame"></div>
+  <video id="camera" autoplay playsinline></video>
+  <div id="scan-frame"></div>
 </div>
 
-<button id="startScanBtn">📷 2回目 QR読み取り開始</button>
+<button id="startScanBtn">② 枠内スキャン開始</button>
 <button id="resetBtn">リセット</button>
-<button id="exportBtn">CSV出力</button>
+<button id="exportBtn">CSV保存</button>
 
-<h3>履歴</h3>
+<h3>📍 検品履歴</h3>
 <table id="history"></table>
 
-<script src="https://unpkg.com/@zxing/library@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
 
 <script>
-// ===== 状態管理 =====
+// ========= 検品用変数 =========
 let firstInput = "";
 let scanning = false;
 let detected = false;
-let currentTrack = null;
-const reader = new ZXing.BrowserMultiFormatReader();
 
-// ===== 音 =====
-const readSound = new Audio("sounds/yomitori.mp3");
-const successSound = new Audio("sounds/seikou.mp3");
-const errorSound = new Audio("sounds/keikoku.mp3");
+// ========= 音声 =========
+const beepOk = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+const beepNg = new Audio("https://actions.google.com/sounds/v1/cartoon/concussive_hit_guitar_boing.ogg");
 
-// ===== IndexedDB =====
+// ========= IndexedDB =========
 let db;
-const req = indexedDB.open("checksDB_manual", 1);
+const req = indexedDB.open("QR_Inspection_DB", 1);
+
 req.onupgradeneeded = e => {
-    db = e.target.result;
-    db.createObjectStore("checks", { keyPath: "id", autoIncrement: true });
+  db = e.target.result;
+  db.createObjectStore("records", { keyPath: "id", autoIncrement: true });
 };
+
 req.onsuccess = e => {
-    db = e.target.result;
-    loadHistory();
+  db = e.target.result;
+  loadHistory();
 };
 
-// ===== UI =====
-function setStatus(msg, type="normal"){
-    const s = document.getElementById("status");
-    s.textContent = msg;
-    s.className = type;
+function saveResult(first, scanned, result) {
+  const tx = db.transaction("records", "readwrite");
+  tx.objectStore("records").add({
+    time: new Date().toLocaleString(),
+    first,
+    scanned,
+    result
+  });
+  setTimeout(loadHistory, 300);
 }
 
-// ===== スキャン開始 =====
-async function startScan(){
-
-    if(!firstInput) return alert("先に番号を入力してください");
-
-    detected = false;
-    scanning = true;
-
-    try{
-        await reader.decodeFromVideoDevice(
-            undefined,
-            "camera",
-            (result, err) => {
-                if(!result || detected) return;
-                detected = true;
-                processScan(result.text);
-            }
-        );
-
-        const stream = document.getElementById("camera").srcObject;
-        currentTrack = stream.getVideoTracks()[0];
-
-        setStatus("📌 QRを枠に合わせてください");
-
-    }catch(e){
-        alert("カメラ起動エラー: " + e.message);
-        scanning=false;
-    }
+// ========= UI制御 =========
+function setStatus(text, type="normal") {
+  const s = document.getElementById("status");
+  s.textContent = text;
+  s.className = type;
 }
 
-// ===== 判定処理 =====
-function processScan(code){
-    readSound.play();
-    stopScan();
+// ========= カメラ取得 =========
+const video = document.getElementById("camera");
 
-    const ok = code.includes(firstInput);
+async function startScan() {
+  if (!firstInput) return alert("先に手入力してください");
 
-    if(ok){
-        successSound.play();
-        setStatus("✔ 一致しました！","ok");
-    } else {
-        errorSound.play();
-        setStatus("❌ 不一致: "+code,"ng");
-    }
+  if (scanning) return;
+  scanning = true;
+  detected = false;
 
-    saveResult(firstInput, code, ok?"OK":"NG");
-    loadHistory();
+  try {
+   const stream = await navigator.mediaDevices.getUserMedia({
+  video: {
+    facingMode: { ideal: "environment" },
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    focusMode: "continuous",
+    advanced: [
+      { focusMode: "continuous" },
+      { exposureMode: "continuous" },
+      { contrast: 1.5 },
+      { zoom: 2 }  // ←これでQRを大きく撮れる
+    ]
+  }
+});
+
+
+    video.srcObject = stream;
+    setStatus("枠内にQRコードを合わせてください","normal");
+
+    requestAnimationFrame(scanLoop);
+
+  } catch (e) {
+    alert("カメラエラー：" + e.message);
+  }
 }
 
-// ===== カメラ停止 =====
-function stopScan(){
-    scanning = false;
-    reader.reset();
+function stopCamera() {
+  scanning = false;
+  if (video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
+  video.srcObject = null;
 }
 
-// ===== 手動フォーカス（タップ） =====
-document.getElementById("camera").addEventListener("click", async ()=>{
+// ========= QR枠内スキャン処理 =========
+function scanLoop() {
+  if (!scanning || detected) return;
 
-    if(!currentTrack) return;
-    const caps = currentTrack.getCapabilities();
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
 
-    if(!caps.focusDistance) return; // 対応していない端末
+  const frame = document.getElementById("scan-frame").getBoundingClientRect();
+  const rect = video.getBoundingClientRect();
 
-    setStatus("🔧 ピント調整中...");
+  canvas.width = frame.width;
+  canvas.height = frame.height;
 
-    await currentTrack.applyConstraints({
-        advanced: [{ focusMode: "manual", focusDistance: caps.focusDistance.min }]
+  const scaleX = video.videoWidth / rect.width;
+  const scaleY = video.videoHeight / rect.height;
+
+  ctx.drawImage(video,
+    (frame.left - rect.left) * scaleX,
+    (frame.top - rect.top) * scaleY,
+    frame.width * scaleX,
+    frame.height * scaleY,
+    0,0,canvas.width,canvas.height
+  );
+
+  const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+  const qr = jsQR(imageData.data, canvas.width, canvas.height);
+
+  if (qr) {
+    detected = true;
+    stopCamera();
+    compare(qr.data);
+  } else {
+    requestAnimationFrame(scanLoop);
+  }
+}
+
+// ========= 判定処理 =========
+function compare(scanned) {
+  if (scanned.includes(firstInput)) {
+    setStatus("一致しました！", "ok");
+    beepOk.play();
+    saveResult(firstInput, scanned, "OK");
+  } else {
+    setStatus("不一致: " + scanned, "ng");
+    beepNg.play();
+    saveResult(firstInput, scanned, "NG");
+  }
+}
+
+// ========= 入力イベント =========
+document.getElementById("manualInput").addEventListener("input", e=>{
+  firstInput = e.target.value.trim();
+  if (firstInput) setStatus("次にQRコードを読み取ってください","normal");
+});
+
+// ========= 履歴表示 =========
+function loadHistory() {
+  const tx = db.transaction("records","readonly");
+  const req = tx.objectStore("records").getAll();
+
+  req.onsuccess = () => {
+    const table = document.getElementById("history");
+    table.innerHTML = "<tr><th>時刻</th><th>入力</th><th>QR</th><th>結果</th></tr>";
+
+    req.result.reverse().slice(0,30).forEach(r=>{
+      table.innerHTML += `<tr><td>${r.time}</td><td>${r.first}</td><td>${r.scanned}</td><td>${r.result}</td></tr>`;
     });
-
-    setTimeout(()=> setStatus("📌 QRを枠に合わせてください"), 800);
-});
-
-// ===== 手動入力 =====
-manualInput.addEventListener("change",()=>{
-    firstInput = manualInput.value.trim();
-    if(firstInput) setStatus("次にQRを読み取ってください");
-});
-
-// ===== 保存 =====
-function saveResult(a,b,c){
-    db.transaction("checks","readwrite").objectStore("checks")
-    .add({time:new Date().toLocaleString(), first:a, second:b, result:c});
+  };
 }
 
-// ===== 履歴表示 =====
-function loadHistory(){
-    const req = db.transaction("checks","readonly").objectStore("checks").getAll();
-    req.onsuccess = ()=>{
-        const table = document.getElementById("history");
-        table.innerHTML = `<tr><th>時刻</th><th>入力</th><th>QR</th><th>結果</th></tr>`;
-        req.result.reverse().slice(0,20).forEach(r=>{
-            table.innerHTML += `<tr><td>${r.time}</td><td>${r.first}</td><td>${r.second}</td><td>${r.result}</td></tr>`;
-        });
-    };
-}
+// ========= CSV出力 =========
+document.getElementById("exportBtn").addEventListener("click", ()=>{
 
-// ===== CSV =====
-exportBtn.onclick=()=>{
-    db.transaction("checks","readonly").objectStore("checks").getAll().onsuccess=e=>{
-        const rows=[["時刻","入力","QR","結果"],...e.result.map(r=>[r.time,r.first,r.second,r.result])];
-        const a=document.createElement("a");
-        a.href=URL.createObjectURL(new Blob([rows.map(r=>r.join(",")).join("\n")]));
-        a.download="検品履歴.csv";
-        a.click();
-    };
-};
+  const tx = db.transaction("records","readonly");
+  const req = tx.objectStore("records").getAll();
 
-// ===== 操作 =====
-startScanBtn.onclick=startScan;
-resetBtn.onclick=()=>location.reload();
+  req.onsuccess = ()=>{
+    const rows=[["時刻","入力値","QR値","結果"], ...req.result.map(r=>[r.time,r.first,r.scanned,r.result])];
+
+    const blob = new Blob([rows.map(r=>r.join(",")).join("\n")],{type:"text/csv"});
+    const a = document.createElement("a");
+
+    a.href = URL.createObjectURL(blob);
+    a.download = "検品結果.csv";
+    a.click();
+  };
+});
+
+// ========= ボタン =========
+document.getElementById("startScanBtn").addEventListener("click", startScan);
+document.getElementById("resetBtn").addEventListener("click", ()=>location.reload());
+
 </script>
-
 </body>
 </html>
