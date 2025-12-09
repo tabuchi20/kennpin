@@ -223,7 +223,7 @@ document.getElementById("manualInput").addEventListener("input", e=>{
   if (firstInput) setStatus("次にQRコードを読み取ってください","normal");
 });
 
-// ========= 履歴表示 =========
+// ========= 履歴表示（最新5件まで表示） =========
 function loadHistory() {
   const tx = db.transaction("records","readonly");
   const req = tx.objectStore("records").getAll();
@@ -232,9 +232,19 @@ function loadHistory() {
     const table = document.getElementById("history");
     table.innerHTML = "<tr><th>時刻</th><th>入力</th><th>QR</th><th>結果</th></tr>";
 
-    req.result.reverse().slice(0,30).forEach(r=>{
-      table.innerHTML += `<tr><td>${r.time}</td><td>${r.first}</td><td>${r.scanned}</td><td>${r.result}</td></tr>`;
-    });
+    req.result
+      .reverse()        // 新しい順に並び替え
+      .slice(0,5)       // 最新5件だけ表示
+      .forEach(r=>{
+        table.innerHTML += `
+          <tr>
+            <td>${r.time}</td>
+            <td>${r.first}</td>
+            <td>${r.scanned}</td>
+            <td>${r.result}</td>
+          </tr>
+        `;
+      });
   };
 }
 
@@ -261,4 +271,5 @@ document.getElementById("resetBtn").addEventListener("click", ()=>location.reloa
 </script>
 </body>
 </html>
+
 
