@@ -10,17 +10,55 @@
 <title>QRコード検品 Webアプリ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; }
+body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; margin-bottom:80px;}
 #status { padding: 20px; font-size: 24px; font-weight: bold; border-radius: 12px; text-align: center; margin-bottom: 20px; }
 .ok { background: green; color: white; }
 .ng { background: red; color: white; }
 .normal { background: #e5e5e5; color: #0066cc; }
+
 button { width: 100%; font-size: 20px; padding: 15px; margin-top: 20px; border-radius: 10px; }
+
 table { width: 100%; margin-top: 20px; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #ddd; padding: 8px; }
+
 #video-container { max-width: 400px; margin: 20px 0; position: relative; }
 video { width: 100%; border-radius: 12px; }
-#scan-frame { position: absolute; top: 50%; left: 50%; width: 180px; height: 180px; margin-left: -90px; margin-top: -90px; border: 3px solid rgba(0,200,0,0.7); border-radius: 12px; pointer-events: none; }
+
+#scan-frame {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 180px; height: 180px;
+    margin-left: -90px; margin-top: -90px;
+    border: 3px solid rgba(0,200,0,0.7);
+    border-radius: 12px;
+    pointer-events: none;
+}
+
+/* ▼ 固定フッターナビ ▼ */
+.navbar {
+    position:fixed;
+    bottom:0;
+    left:0;
+    width:100%;
+    background:#f3f3f3;
+    border-top:2px solid #ccc;
+    display:flex;
+    justify-content:space-around;
+}
+.navbar a {
+    flex:1;
+    text-align:center;
+    padding:15px 0;
+    font-size:18px;
+    text-decoration:none;
+    color:#333;
+}
+.navbar a.active {
+    background:#0078ff;
+    color:white;
+    font-weight:bold;
+}
+
 </style>
 </head>
 <body>
@@ -33,12 +71,20 @@ video { width: 100%; border-radius: 12px; }
     <div id="scan-frame"></div>
 </div>
 
-<button id="scanBtn">QRコードを読み取る</button>
-<button id="resetBtn">最初に戻る</button>
-<button id="exportBtn">CSV出力</button>  <!-- ★追加 -->
+<button id="scanBtn">📷 QRコードを読み取る</button>
+<button id="resetBtn">🔄 最初に戻る</button>
+<button id="exportBtn">📁 CSV出力</button>
 
 <h3>履歴</h3>
 <table id="history"></table>
+
+
+<!-- ▼ ページ切替ナビ ▼ -->
+<div class="navbar">
+    <a href="index.html" class="active">📷 QR検品</a>
+    <a href="tenyuryoku.html">⌨ 手入力検品</a>
+</div>
+
 
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 
@@ -81,10 +127,12 @@ async function scan() {
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: { ideal: "environment" } }
         });
+
         videoElement.srcObject = stream;
         const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'v');
         handleScan(result.text);
         stopCamera();
+
     } catch(e) {
         alert("カメラ起動/読み取りに失敗: " + e.message);
         stopCamera();
@@ -109,22 +157,26 @@ function handleScan(code) {
         firstCode2 = code.length >= 20 ? code.substring(10, 20) : "";
         setStatus("読み取り完了 → パーツラベルを読み取ってください", "normal");
         step = 2;
+
     } else if (step === 2) {
         if (code.length < 34) {
             setStatus("バーコードが短すぎます（34文字未満）", "ng");
             return;
         }
         secondCode = code.substring(33, 43);
+
         let matchOK = (secondCode === firstCode1) || (firstCode2 !== "" && secondCode === firstCode2);
+
         if (matchOK) {
-            setStatus("一致しました！", "ok");
+            setStatus("✔ 一致しました！", "ok");
             successSound.play();
         } else {
-            setStatus("不一致です", "ng");
+            setStatus("❌ 不一致です", "ng");
             errorSound.play();
         }
         saveResult(firstCode1 + (firstCode2 ? " / " + firstCode2 : ""), secondCode, matchOK ? "OK" : "NG");
         loadHistory();
+
         document.getElementById("scanBtn").style.display = "none";
         step = 3;
     }
@@ -161,14 +213,12 @@ function resetAll() {
     document.getElementById("scanBtn").style.display = "block";
 }
 
-/* ★★★ CSVエクスポート機能追加 ★★★ */
 function exportCSV() {
     const tx = db.transaction("checks", "readonly");
     const req = tx.objectStore("checks").getAll();
     req.onsuccess = () => {
         let rows = [["時刻", "1回目", "2回目", "結果"]];
         req.result.forEach(r => rows.push([r.time, r.first, r.second, r.result]));
-
         let csvContent = rows.map(e => e.join(",")).join("\n");
 
         const blob = new Blob([csvContent], { type: "text/csv" });
@@ -184,8 +234,7 @@ function exportCSV() {
 
 document.getElementById("scanBtn").addEventListener("click", scan);
 document.getElementById("resetBtn").addEventListener("click", resetAll);
-document.getElementById("exportBtn").addEventListener("click", exportCSV); // ★追加
-
+document.getElementById("exportBtn").addEventListener("click", exportCSV);
 </script>
 </body>
 </html>
