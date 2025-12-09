@@ -25,17 +25,11 @@ video { width: 100%; border-radius: 10px; }
     pointer-events: none;
     border-radius: 10px;
 }
-
-#zoomControl {
-    width: 100%;
-    margin-top: 10px;
-    margin-bottom: 20px;
-}
 </style>
 </head>
 <body>
 
-<h2>📦 QR検品システム（iPhone対応 + フォーカス調整）</h2>
+<h2>📦 QR検品システム（iPhone対応 + フォーカス最適化）</h2>
 
 <div id="status" class="normal">1回目の番号を入力してください</div>
 
@@ -45,9 +39,6 @@ video { width: 100%; border-radius: 10px; }
     <video id="camera" autoplay playsinline></video>
     <div id="scan-frame"></div>
 </div>
-
-<label>🔍ズーム調整：</label>
-<input type="range" id="zoomControl" min="1" max="5" step="0.1" value="2">
 
 <button id="startScanBtn">📷 2回目 QR読み取り開始</button>
 <button id="resetBtn">リセット</button>
@@ -59,7 +50,7 @@ video { width: 100%; border-radius: 10px; }
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 
 <script>
-// ======== Safari Polyfill ========
+// ===== iPhone対応 Polyfill =====
 if (!navigator.mediaDevices) navigator.mediaDevices = {};
 if (!navigator.mediaDevices.getUserMedia) {
     navigator.mediaDevices.getUserMedia = function(c) {
@@ -69,7 +60,7 @@ if (!navigator.mediaDevices.getUserMedia) {
     };
 }
 
-// ======== 変数管理 ========
+// ===== 状態管理 =====
 let firstInput = "";
 let scanning = false;
 let detected = false;
@@ -77,11 +68,12 @@ let currentTrack = null;
 
 const reader = new ZXing.BrowserMultiFormatReader();
 
+// ===== サウンド =====
 const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
-// ======== IndexedDB ========
+// ===== IndexedDB =====
 let db;
 const req = indexedDB.open("checksDB_manual", 1);
 req.onupgradeneeded = e => {
@@ -93,18 +85,17 @@ req.onsuccess = e => {
     loadHistory();
 };
 
-// ======== UI ========
-const statusBox = document.getElementById("status");
+// ===== UI =====
 function setStatus(txt, type="normal") {
-    statusBox.textContent = txt;
-    statusBox.className = type;
+    const s = document.getElementById("status");
+    s.textContent = txt;
+    s.className = type;
 }
 
 const video = document.getElementById("camera");
 const scanFrame = document.getElementById("scan-frame");
-const zoomSlider = document.getElementById("zoomControl");
 
-// ======== カメラ起動 ========
+// ===== カメラ起動 =====
 async function startScan() {
     if (!firstInput) return alert("先に番号を入力してください");
 
@@ -124,8 +115,6 @@ async function startScan() {
         video.srcObject = stream;
         currentTrack = stream.getVideoTracks()[0];
 
-        applyZoom(2);
-
         setStatus("📌 QRコードを枠に合わせてください");
         requestAnimationFrame(scanLoop);
 
@@ -140,7 +129,7 @@ function stopCamera() {
     scanning = false;
 }
 
-// ======== スキャン処理 ========
+// ===== スキャン処理 =====
 function scanLoop() {
     if (!scanning || detected) return;
 
@@ -162,7 +151,7 @@ function scanLoop() {
     );
 
     reader.decodeFromCanvas(canvas)
-        .then(result=>processScan(result.text))
+        .then(result => processScan(result.text))
         .catch(()=>requestAnimationFrame(scanLoop));
 }
 
@@ -172,26 +161,27 @@ function processScan(code){
     stopCamera();
 
     const ok = code.includes(firstInput);
-    setStatus(ok?"✔ 一致しました！":"❌ 不一致: "+code, ok?"ok":"ng");
+
+    setStatus(ok ? "✔ 一致しました！" : `❌ 不一致: ${code}`, ok ? "ok" : "ng");
     ok ? successSound.play() : errorSound.play();
 
     saveResult(firstInput, code, ok?"OK":"NG");
     loadHistory();
 }
 
-// ======== 入力検知 ========
+// ===== 手動入力 =====
 document.getElementById("manualInput").addEventListener("change", ()=>{
     firstInput = manualInput.value.trim();
     if(firstInput) setStatus("次にQRを読み取ってください");
 });
 
-// ======== DB保存 ========
-function saveResult(a,b,c){
+// ===== DB保存 =====
+function saveResult(first, second, result){
     db.transaction("checks","readwrite").objectStore("checks")
-    .add({time:new Date().toLocaleString(), first:a, second:b, result:c});
+    .add({time:new Date().toLocaleString(), first, second, result});
 }
 
-// ======== 履歴 ========
+// ===== 履歴 =====
 function loadHistory(){
     const req = db.transaction("checks","readonly").objectStore("checks").getAll();
     req.onsuccess = ()=>{
@@ -203,42 +193,32 @@ function loadHistory(){
     };
 }
 
-// ======== CSV出力 ========
-document.getElementById("exportBtn").onclick = ()=>{
-    db.transaction("checks","readonly").objectStore("checks").getAll().onsuccess = e=>{
-        const rows=[
-            ["時刻","入力","QR","結果"],
-            ...e.result.map(r=>[r.time,r.first,r.second,r.result])
-        ];
-        const blob=new Blob([rows.map(r=>r.join(",")).join("\n")]);
+// ===== CSV出力 =====
+document.getElementById("exportBtn").onclick=()=>{
+    db.transaction("checks","readonly").objectStore("checks").getAll().onsuccess=e=>{
+        const rows=[["時刻","入力","QR","結果"], ...e.result.map(r=>[r.time,r.first,r.second,r.result])];
         const a=document.createElement("a");
-        a.href=URL.createObjectURL(blob);
+        a.href=URL.createObjectURL(new Blob([rows.map(r=>r.join(",")).join("\n")]));
         a.download="検品履歴.csv";
         a.click();
     };
 };
 
-// ======== 手動フォーカス ========
+// ===== 手動フォーカス =====
 video.addEventListener("click", async ()=> {
     if (!currentTrack) return;
     const caps = currentTrack.getCapabilities();
     if (!caps.focusDistance) return;
 
-    await currentTrack.applyConstraints({ advanced:[{focusMode:"manual", focusDistance:caps.focusDistance.min}] });
-    setStatus("🔧 フォーカス調整中...");
-    setTimeout(()=>setStatus("📌 QRコードを枠に合わせてください"),1000);
+    await currentTrack.applyConstraints({
+        advanced:[{focusMode:"manual", focusDistance:caps.focusDistance.min}]
+    });
+
+    setStatus("🔧 ピント調整中...");
+    setTimeout(()=>setStatus("📌 QRコードを枠に合わせてください"),800);
 });
 
-// ======== ズーム調整 ========
-zoomSlider.oninput = ()=>applyZoom(zoomSlider.value);
-
-function applyZoom(level){
-    if (!currentTrack) return;
-    const caps = currentTrack.getCapabilities();
-    if (caps.zoom) currentTrack.applyConstraints({ advanced:[{zoom:Number(level)}] });
-}
-
-// ======== ボタン ========
+// ===== ボタン =====
 document.getElementById("startScanBtn").onclick = startScan;
 document.getElementById("resetBtn").onclick = ()=>location.reload();
 </script>
