@@ -6,13 +6,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; background:#f5f5f5; }
+body { 
+  font-family: -apple-system, BlinkMacSystemFont; 
+  padding: 20px; background:#f5f5f5; 
+  margin-bottom: 90px; /* ←フッターと重ならないよう余白追加 */
+}
+
 #status { padding: 20px; font-size: 22px; font-weight: bold; border-radius: 10px; text-align: center; margin-bottom: 20px; }
 .ok { background: green; color: white; }
 .ng { background: red; color: white; }
 .normal { background: #e8e8e8; color: #003366; }
+
 input { width: 100%; font-size: 24px; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #888; }
 button { width: 100%; font-size: 20px; padding: 15px; margin-top: 10px; border-radius: 10px; }
+
 table { width: 100%; margin-top: 20px; border-collapse: collapse; background:white; }
 th, td { border-bottom: 1px solid #ddd; padding: 6px; }
 
@@ -29,16 +36,36 @@ video { width: 100%; border-radius: 10px; }
   pointer-events: none;
   border-radius: 10px;
 }
+
+/* ===== フッターメニュー ===== */
+.footer-menu {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  background: #eee;
+  border-top: 2px solid #ccc;
+}
+.footer-menu a {
+  flex: 1;
+  text-align: center;
+  padding: 15px;
+  font-size: 18px;
+  text-decoration: none;
+  color: #333;
+  border-right: 1px solid #ccc;
+}
+.footer-menu a:last-child {
+  border-right: none;
+}
 </style>
 </head>
 <body>
 
-<h2>📦 手入力検品</h2>
+<h2>📦 QR検品システム（強化版）</h2>
 
-<!-- 🔽追加部分 -->
-<button onclick="location.href='index.html'">🔁 スキャン画面へ戻る</button>
-
-<div id="status" class="normal">① 最初に品番を手入力してください</div>
+<div id="status" class="normal">① 最初に番号を手入力してください</div>
 <input id="manualInput" type="text" placeholder="例：ABC123456" autofocus maxlength="50">
 
 <div id="video-container">
@@ -109,23 +136,16 @@ async function startScan() {
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
+     video: {
         facingMode: { ideal: "environment" },
         width: { ideal: 1920 },
         height: { ideal: 1080 },
-        focusMode: "continuous",
-        advanced: [
-          { focusMode: "continuous" },
-          { exposureMode: "continuous" },
-          { contrast: 1.5 },
-          { zoom: 2 }
-        ]
+        advanced: [{ zoom: 2 }]
       }
     });
 
     video.srcObject = stream;
     setStatus("枠内にQRコードを合わせてください","normal");
-
     requestAnimationFrame(scanLoop);
 
   } catch (e) {
@@ -139,6 +159,7 @@ function stopCamera() {
   video.srcObject = null;
 }
 
+// ========= QR枠内スキャン処理 =========
 function scanLoop() {
   if (!scanning || detected) return;
 
@@ -174,6 +195,7 @@ function scanLoop() {
   }
 }
 
+// ========= 判定処理 =========
 function compare(scanned) {
   if (scanned.includes(firstInput)) {
     setStatus("一致しました！", "ok");
@@ -186,6 +208,7 @@ function compare(scanned) {
   }
 }
 
+// ========= 入力イベント =========
 document.getElementById("manualInput").addEventListener("input", e=>{
   firstInput = e.target.value.trim();
   if (firstInput) setStatus("次にQRコードを読み取ってください","normal");
@@ -208,16 +231,14 @@ function loadHistory() {
 
 // ========= CSV出力 =========
 document.getElementById("exportBtn").addEventListener("click", ()=>{
-
   const tx = db.transaction("records","readonly");
   const req = tx.objectStore("records").getAll();
 
   req.onsuccess = ()=>{
     const rows=[["時刻","入力値","QR値","結果"], ...req.result.map(r=>[r.time,r.first,r.scanned,r.result])];
-
-    const blob = new Blob([rows.map(r=>r.join(",")).join("\n")],{type:"text/csv"});
+    const blob = new Blob([rows.join("\n")],{type:"text/csv"});
+    
     const a = document.createElement("a");
-
     a.href = URL.createObjectURL(blob);
     a.download = "検品結果.csv";
     a.click();
@@ -229,6 +250,12 @@ document.getElementById("startScanBtn").addEventListener("click", startScan);
 document.getElementById("resetBtn").addEventListener("click", ()=>location.reload());
 
 </script>
+
+<!-- === フッターメニュー === -->
+<div class="footer-menu">
+    <a href="index.html">ホーム</a>
+    <a href="tenyuryoku.html">手入力</a>
+</div>
+
 </body>
 </html>
-
