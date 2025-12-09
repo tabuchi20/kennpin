@@ -33,12 +33,12 @@ video { width: 100%; border-radius: 10px; }
 </head>
 <body>
 
-<h2>📦 QR検品システム（強化版）</h2>
+<h2>📦 手入力検品</h2>
 
 <!-- 🔽追加部分 -->
 <button onclick="location.href='index.html'">🔁 スキャン画面へ戻る</button>
 
-<div id="status" class="normal">① 最初に番号を手入力してください</div>
+<div id="status" class="normal">① 最初に品番を手入力してください</div>
 <input id="manualInput" type="text" placeholder="例：ABC123456" autofocus maxlength="50">
 
 <div id="video-container">
@@ -231,3 +231,4 @@ document.getElementById("resetBtn").addEventListener("click", ()=>location.reloa
 </script>
 </body>
 </html>
+
