@@ -2,100 +2,130 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>バーコード検品システム（ZXing版）</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<title>バーコードスキャナー</title>
 <style>
-body {
-    font-family: -apple-system, BlinkMacSystemFont;
-    text-align: center;
-    padding: 20px;
-}
-#preview {
-    width: 90%;
-    border: 3px solid #4CAF50;
-    border-radius: 10px;
-}
-#result, #status {
-    font-size: 22px;
-    margin-top: 15px;
-}
-button {
-    padding: 12px 24px;
-    font-size: 20px;
-    margin-top: 20px;
-    border-radius: 10px;
-}
+    video {
+        width: 100%;
+        max-width: 400px;
+        border: 2px solid black;
+        border-radius: 10px;
+    }
+
+    #scan-frame {
+        width: 220px;
+        height: 220px;
+        border: 3px solid red;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+    }
+
+    #output {
+        margin-top: 15px;
+        font-size: 18px;
+        font-weight: bold;
+    }
 </style>
-
-<!-- ZXing WebAssembly版 CDN -->
-<script src="https://unpkg.com/@zxing/browser@latest"></script>
-<script src="https://unpkg.com/@zxing/library@latest"></script>
-
 </head>
+
 <body>
 
-<h2>バーコード検品システム</h2>
+<h2>バーコード読み取り</h2>
 
-<video id="preview"></video>
+<div style="position: relative; width:400px;">
+    <video id="camera" autoplay playsinline></video>
+    <div id="scan-frame"></div>
+</div>
 
-<div id="status">7桁バーコードを読み取ってください</div>
-<div id="result"></div>
+<br>
+<button id="exportBtn" disabled>CSV出力</button>
+<div id="output">読み取り結果：なし</div>
 
-<button id="startBtn">カメラを起動</button>
-
+<script src="https://unpkg.com/@zxing/library@latest"></script>
 <script>
-const codeReader = new ZXing.BrowserMultiFormatReader();
-let step = 1; // 1 = 7桁, 2 = 10桁
-let firstCode = "";
+const video = document.getElementById("camera");
+const outputDiv = document.getElementById("output");
+const scanFrame = document.getElementById("scan-frame");
+const exportBtn = document.getElementById("exportBtn");
 
-document.getElementById("startBtn").addEventListener("click", () => {
-    startCamera();
+const reader = new ZXing.BrowserMultiFormatReader();
+let results = [];
+let scanning = true;
+
+// ====== CSV出力 ======
+exportBtn.addEventListener("click", () => {
+    const csvContent = "data:text/csv;charset=utf-8," +
+        results.map(row => row).join("\n");
+
+    const link = document.createElement("a");
+    link.href = encodeURI(csvContent);
+    link.download = "barcode_results.csv";
+    link.click();
 });
 
 async function startCamera() {
-    document.getElementById("result").innerText = "";
-
     try {
-        const videoInputDevices = await codeReader.listVideoInputDevices();
-
-        // 背面カメラを選択
-        const backCam = videoInputDevices.find(d => d.label.toLowerCase().includes("back"))
-                     || videoInputDevices[0];
-
-        await codeReader.decodeFromVideoDevice(backCam.deviceId, 'preview', (result, err) => {
-            if (result) {
-                const code = result.getText();
-
-                if (step === 1 && code.length === 7) {
-                    firstCode = code;
-                    step = 2;
-                    document.getElementById("status").innerText = "次に10桁バーコードを読み取ってください";
-                    document.getElementById("result").innerText = "1つ目（7桁）: " + code;
-                } 
-                else if (step === 2 && code.length === 10) {
-                    const first7 = code.substring(0, 7);
-
-                    if (first7 === firstCode) {
-                        document.getElementById("result").innerHTML =
-                            `<span style="color:green;font-weight:bold;">✔ 一致しました！</span><br>2つ目: ${code}`;
-                    } else {
-                        document.getElementById("result").innerHTML =
-                            `<span style="color:red;font-weight:bold;">✖ 一致しません！</span><br>2つ目: ${code}`;
-                    }
-
-                    // 初期化
-                    step = 1;
-                    firstCode = "";
-                    document.getElementById("status").innerText = "7桁バーコードを読み取ってください";
-                }
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: "environment",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
             }
         });
-    } catch (e) {
-        console.error(e);
-        alert("カメラが起動できませんでした：" + e);
+
+        video.srcObject = stream;
+        video.onloadedmetadata = () => video.play();
+
+        startScanning();
+    } catch (err) {
+        alert("カメラが使用できません: " + err);
     }
 }
+
+function startScanning() {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    async function scanLoop() {
+        if (!scanning) return;
+
+        canvas.width = scanFrame.offsetWidth;
+        canvas.height = scanFrame.offsetHeight;
+
+        const videoRect = video.getBoundingClientRect();
+        const frameRect = scanFrame.getBoundingClientRect();
+
+        const sx = (frameRect.left - videoRect.left) * (video.videoWidth / videoRect.width);
+        const sy = (frameRect.top - videoRect.top) * (video.videoHeight / videoRect.height);
+        const sWidth = canvas.width * (video.videoWidth / videoRect.width);
+        const sHeight = canvas.height * (video.videoHeight / videoRect.height);
+
+        ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+
+        try {
+            const result = await reader.decodeFromImageUrl(canvas.toDataURL());
+            if (result && result.text) {
+                addResult(result.text);
+            }
+        } catch {}
+
+        requestAnimationFrame(scanLoop);
+    }
+
+    scanLoop();
+}
+
+function addResult(code) {
+    if (!results.includes(code)) {
+        results.push(code);
+        exportBtn.disabled = false;
+    }
+    outputDiv.textContent = "読み取り結果：" + code;
+}
+
+startCamera();
 </script>
 
 </body>
