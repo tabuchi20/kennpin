@@ -66,7 +66,7 @@ video { width: 100%; border-radius: 10px; }
 </head>
 <body>
 
-<h2>📦 手入力検品システム</h2>
+<h2>手入力検品システム</h2>
 
 <div id="status" class="normal">① 最初に品番を手入力してください</div>
 <input id="manualInput" type="text" placeholder="例：ABC123456" autofocus maxlength="50">
@@ -76,11 +76,11 @@ video { width: 100%; border-radius: 10px; }
   <div id="scan-frame"></div>
 </div>
 
-<button id="startScanBtn">② 枠内スキャン開始</button>
-<button id="resetBtn">リセット</button>
-<button id="exportBtn">CSV保存</button>
+<button id="startScanBtn">📷 QRコードを読み取る</button>
+<button id="resetBtn">🔄 最初に戻る</button>
+<button id="exportBtn">📁 CSV出力</button>
 
-<h3>📍 検品履歴</h3>
+<h3>履歴</h3>
 <table id="history"></table>
 
 <!-- ▼ フッターメニュー（index.htmlと同じ仕様） -->
@@ -207,11 +207,11 @@ function scanLoop() {
 // ========= 判定処理 =========
 function compare(scanned) {
   if (scanned.includes(firstInput)) {
-    setStatus("一致しました！", "ok");
+    setStatus("✔ 一致しました！", "ok");
     beepOk.play();
     saveResult(firstInput, scanned, "OK");
   } else {
-    setStatus("不一致です！ " , "ng");
+    setStatus("❌ 不一致です" , "ng");
     beepNg.play();
     saveResult(firstInput, scanned, "NG");
   }
@@ -271,5 +271,6 @@ document.getElementById("resetBtn").addEventListener("click", ()=>location.reloa
 </script>
 </body>
 </html>
+
 
 
