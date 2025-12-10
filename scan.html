@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>海外ラベル貼り検品</title>
+<title>バーコード検品（Code128）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -34,7 +34,7 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 </head>
 
 <body>
-<h2>海外ラベル貼り検品</h2>
+<h2>バーコード検品（Code128）</h2>
 <div id="status" class="normal">1回目のバーコードを読み取ってください</div>
 
 <div id="video-container">
@@ -44,7 +44,7 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 
 <button id="scanBtn">📷 読み取る</button>
 <button id="resetBtn">🔄 最初に戻る</button>
-<button id="csvBtn">📁 CSV出力</button>
+<button id="csvBtn">📄 CSV出力</button>
 
 <h3>履歴（最新5件）</h3>
 <table id="history"></table>
@@ -52,22 +52,29 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 
 <script>
+// ======== 追加：音声ファイル =========
+const readSound = new Audio("sounds/yomitori.mp3");
+const successSound = new Audio("sounds/seikou.mp3");
+const errorSound = new Audio("sounds/keikoku.mp3");
+
+// ======== 変数 =========
 let step = 1;
 let firstCode = "";
 let secondCode = "";
 let scanning = false;
 
 const reader = new ZXing.BrowserMultiFormatReader();
-
 const video = document.getElementById("v");
 const scanFrame = document.getElementById("scan-frame");
 
+// ======== 表示状態変更 =========
 function setStatus(text, type="normal") {
     const s = document.getElementById("status");
     s.textContent = text;
     s.className = type;
 }
 
+// ======== スキャン開始 =========
 async function startScan() {
     if (scanning) return;
     scanning = true;
@@ -89,6 +96,7 @@ async function startScan() {
     }
 }
 
+// ======== スキャンループ =========
 async function scanLoop() {
     if (!scanning) return;
 
@@ -124,6 +132,7 @@ async function scanLoop() {
     requestAnimationFrame(scanLoop);
 }
 
+// ======== カメラ停止 =========
 function stopCamera() {
     scanning = false;
     if (video.srcObject) {
@@ -132,37 +141,54 @@ function stopCamera() {
     video.srcObject = null;
 }
 
+// ======== スキャン後処理（音声 + 判定 + ボタン制御） =========
 function handleScan(code) {
     stopCamera();
+
+    // 共通：読み取り音
+    readSound.currentTime = 0;
+    readSound.play();
 
     if (step === 1) {
         firstCode = code.trim();
         setStatus("1回目 OK → 2回目を読み取ってください", "normal");
         step = 2;
+
     } else {
         secondCode = code.trim();
-
         const ok = (firstCode === secondCode);
 
         if (ok) {
+            successSound.currentTime = 0;
+            successSound.play();
             setStatus("✔ 一致しました！", "ok");
         } else {
+            errorSound.currentTime = 0;
+            errorSound.play();
             setStatus("❌ 不一致です", "ng");
         }
 
         addHistory(firstCode, secondCode, ok ? "OK" : "NG");
-
         step = 3;
+
+        // ★ 2回目が終わったら「読み取る」ボタンを隠す
+        document.getElementById("scanBtn").style.display = "none";
     }
 }
 
+// ======== 最初に戻る =========
 function resetAll() {
     step = 1;
     firstCode = "";
     secondCode = "";
+
     setStatus("1回目のバーコードを読み取ってください", "normal");
+
+    // ★ 読み取りボタンを再表示
+    document.getElementById("scanBtn").style.display = "block";
 }
 
+// ======== 履歴管理 =========
 let historyData = [];
 
 function addHistory(f, s, r) {
@@ -189,7 +215,7 @@ function addHistory(f, s, r) {
     });
 }
 
-/* ▼▼ CSV出力追加 ▼▼ */
+// ======== CSV 出力 =========
 function downloadCSV() {
     let csv = "時刻,1回目,2回目,結果\n";
     historyData.forEach(row => {
@@ -207,11 +233,11 @@ function downloadCSV() {
     URL.revokeObjectURL(url);
 }
 
-document.getElementById("csvBtn").onclick = downloadCSV;
-/* ▲▲ ここまで CSV出力 ▲▲ */
-
+// ======== イベント設定 =========
 document.getElementById("scanBtn").onclick = startScan;
 document.getElementById("resetBtn").onclick = resetAll;
+document.getElementById("csvBtn").onclick = downloadCSV;
+
 </script>
 </body>
 </html>
