@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>バーコード検品（Code128）</title>
+<title>海外ラベル貼り検品</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -34,7 +34,7 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 </head>
 
 <body>
-<h2>バーコード検品（Code128）</h2>
+<h2>海外ラベル貼り検品</h2>
 <div id="status" class="normal">1回目のバーコードを読み取ってください</div>
 
 <div id="video-container">
@@ -44,6 +44,7 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 
 <button id="scanBtn">📷 読み取る</button>
 <button id="resetBtn">🔄 最初に戻る</button>
+<button id="csvBtn">📁 CSV出力</button>
 
 <h3>履歴（最新5件）</h3>
 <table id="history"></table>
@@ -118,9 +119,7 @@ async function scanLoop() {
             handleScan(result.text);
             return;
         }
-    } catch (e) {
-        /* 読み取れないだけなので無視 */
-    }
+    } catch (e) { }
 
     requestAnimationFrame(scanLoop);
 }
@@ -189,6 +188,27 @@ function addHistory(f, s, r) {
             </tr>`;
     });
 }
+
+/* ▼▼ CSV出力追加 ▼▼ */
+function downloadCSV() {
+    let csv = "時刻,1回目,2回目,結果\n";
+    historyData.forEach(row => {
+        csv += `${row.time},${row.first},${row.second},${row.result}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "barcode_history.csv";
+    a.click();
+
+    URL.revokeObjectURL(url);
+}
+
+document.getElementById("csvBtn").onclick = downloadCSV;
+/* ▲▲ ここまで CSV出力 ▲▲ */
 
 document.getElementById("scanBtn").onclick = startScan;
 document.getElementById("resetBtn").onclick = resetAll;
