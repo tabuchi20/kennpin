@@ -2,76 +2,75 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>バーコードスキャナー（2回照合）</title>
+<title>バーコード検品（Code128）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-    video {
-        width: 100%;
-        max-width: 400px;
-        border: 2px solid black;
-        border-radius: 10px;
-    }
+body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; margin-bottom:80px; }
+#status { padding: 20px; font-size: 24px; font-weight: bold; border-radius: 12px; text-align: center; margin-bottom: 20px; }
+.ok { background: green; color: white; }
+.ng { background: red; color: white; }
+.normal { background: #e5e5e5; color: #0066cc; }
 
-    #scan-frame {
-        width: 220px;
-        height: 220px;
-        border: 3px solid red;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        pointer-events: none;
-    }
+#video-container { position: relative; width: 100%; max-width: 400px; margin: auto; }
+video { width: 100%; border-radius: 10px; }
 
-    #output {
-        margin-top: 15px;
-        font-size: 18px;
-        font-weight: bold;
-    }
+#scan-frame {
+  width: 260px;
+  height: 160px;
+  border: 3px solid rgba(255,0,0,0.8);
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: 10px;
+}
+
+button { width: 100%; font-size: 20px; padding: 15px; margin-top: 20px; border-radius: 10px; }
+
+table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 </style>
 </head>
 
 <body>
+<h2>バーコード検品（Code128）</h2>
+<div id="status" class="normal">1回目のバーコードを読み取ってください</div>
 
-<h2>バーコード読み取り（2回照合）</h2>
-
-<div style="position: relative; width:400px;">
-    <video id="camera" autoplay playsinline></video>
+<div id="video-container">
+    <video id="v" autoplay playsinline></video>
     <div id="scan-frame"></div>
 </div>
 
-<br>
-<button id="resetBtn">リセット</button>
-<div id="output">読み取り結果：なし</div>
+<button id="scanBtn">📷 読み取る</button>
+<button id="resetBtn">🔄 最初に戻る</button>
+
+<h3>履歴（最新5件）</h3>
+<table id="history"></table>
 
 <script src="https://unpkg.com/@zxing/library@latest"></script>
+
 <script>
-const video = document.getElementById("camera");
-const outputDiv = document.getElementById("output");
+let step = 1;
+let firstCode = "";
+let secondCode = "";
+let scanning = false;
+
+const reader = new ZXing.BrowserMultiFormatReader();
+
+const video = document.getElementById("v");
 const scanFrame = document.getElementById("scan-frame");
-const resetBtn = document.getElementById("resetBtn");
 
-const reader = new ZXing.BrowserMultiFormatReader({
-    // バーコード優先
-    possibleFormats: [
-        ZXing.BarcodeFormat.CODE_128,
-        ZXing.BarcodeFormat.CODE_39,
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.EAN_8
-    ]
-});
+function setStatus(text, type="normal") {
+    const s = document.getElementById("status");
+    s.textContent = text;
+    s.className = type;
+}
 
-let firstScan = null;
-let secondScan = null;
-let scanning = true;
+async function startScan() {
+    if (scanning) return;
+    scanning = true;
 
-resetBtn.addEventListener("click", () => {
-    firstScan = null;
-    secondScan = null;
-    outputDiv.textContent = "読み取り結果：リセット済み";
-});
-
-// ====== カメラ起動 ======
-async function startCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
             video: {
@@ -82,74 +81,117 @@ async function startCamera() {
         });
 
         video.srcObject = stream;
-        video.onloadedmetadata = () => video.play();
-
-        startScanning();
-    } catch (err) {
-        alert("カメラが使用できません: " + err);
+        scanLoop();
+    } catch (e) {
+        alert("カメラが使用できません：" + e.message);
+        scanning = false;
     }
 }
 
-// ====== 読み取りループ ======
-function startScanning() {
+async function scanLoop() {
+    if (!scanning) return;
+
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
 
-    async function scanLoop() {
-        if (!scanning) return;
+    const frameRect = scanFrame.getBoundingClientRect();
+    const videoRect = video.getBoundingClientRect();
 
-        canvas.width = scanFrame.offsetWidth;
-        canvas.height = scanFrame.offsetHeight;
+    canvas.width = frameRect.width;
+    canvas.height = frameRect.height;
 
-        const videoRect = video.getBoundingClientRect();
-        const frameRect = scanFrame.getBoundingClientRect();
+    const scaleX = video.videoWidth / videoRect.width;
+    const scaleY = video.videoHeight / videoRect.height;
 
-        const sx = (frameRect.left - videoRect.left) * (video.videoWidth / videoRect.width);
-        const sy = (frameRect.top - videoRect.top) * (video.videoHeight / videoRect.height);
-        const sWidth = canvas.width * (video.videoWidth / videoRect.width);
-        const sHeight = canvas.height * (video.videoHeight / videoRect.height);
+    ctx.drawImage(
+        video,
+        (frameRect.left - videoRect.left) * scaleX,
+        (frameRect.top  - videoRect.top ) * scaleY,
+        frameRect.width  * scaleX,
+        frameRect.height * scaleY,
+        0, 0, canvas.width, canvas.height
+    );
 
-        ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
-
-        try {
-            const result = await reader.decodeFromImageUrl(canvas.toDataURL());
-            if (result && result.text) {
-                processScan(result.text);
-            }
-        } catch {}
-
-        requestAnimationFrame(scanLoop);
-    }
-
-    scanLoop();
-}
-
-// ====== 読み取り結果処理（2回照合） ======
-function processScan(code) {
-    // 1回目の読み取り
-    if (!firstScan) {
-        firstScan = code;
-        outputDiv.textContent = "1回目読み取り：" + code;
-        return;
-    }
-
-    // 2回目の読み取り
-    if (!secondScan) {
-        secondScan = code;
-
-        if (firstScan === secondScan) {
-            outputDiv.textContent =
-                `判定：一致 ✔（${firstScan}）`;
-        } else {
-            outputDiv.textContent =
-                `判定：不一致 ✖（1回目: ${firstScan} / 2回目: ${secondScan}）`;
+    try {
+        const result = await reader.decodeFromImageUrl(canvas.toDataURL());
+        if (result && result.text) {
+            handleScan(result.text);
+            return;
         }
-        return;
+    } catch (e) {
+        /* 読み取れないだけなので無視 */
+    }
+
+    requestAnimationFrame(scanLoop);
+}
+
+function stopCamera() {
+    scanning = false;
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+    }
+    video.srcObject = null;
+}
+
+function handleScan(code) {
+    stopCamera();
+
+    if (step === 1) {
+        firstCode = code.trim();
+        setStatus("1回目 OK → 2回目を読み取ってください", "normal");
+        step = 2;
+    } else {
+        secondCode = code.trim();
+
+        const ok = (firstCode === secondCode);
+
+        if (ok) {
+            setStatus("✔ 一致しました！", "ok");
+        } else {
+            setStatus("❌ 不一致です", "ng");
+        }
+
+        addHistory(firstCode, secondCode, ok ? "OK" : "NG");
+
+        step = 3;
     }
 }
 
-startCamera();
-</script>
+function resetAll() {
+    step = 1;
+    firstCode = "";
+    secondCode = "";
+    setStatus("1回目のバーコードを読み取ってください", "normal");
+}
 
+let historyData = [];
+
+function addHistory(f, s, r) {
+    historyData.unshift({
+        time: new Date().toLocaleString(),
+        first: f,
+        second: s,
+        result: r
+    });
+
+    historyData = historyData.slice(0,5);
+
+    const table = document.getElementById("history");
+    table.innerHTML = `<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>`;
+
+    historyData.forEach(x=>{
+        table.innerHTML += `
+            <tr>
+                <td>${x.time}</td>
+                <td>${x.first}</td>
+                <td>${x.second}</td>
+                <td>${x.result}</td>
+            </tr>`;
+    });
+}
+
+document.getElementById("scanBtn").onclick = startScan;
+document.getElementById("resetBtn").onclick = resetAll;
+</script>
 </body>
 </html>
