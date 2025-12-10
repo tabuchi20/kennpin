@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>バーコードスキャナー</title>
+<title>バーコードスキャナー（2回照合）</title>
 <style>
     video {
         width: 100%;
@@ -32,7 +32,7 @@
 
 <body>
 
-<h2>バーコード読み取り</h2>
+<h2>バーコード読み取り（2回照合）</h2>
 
 <div style="position: relative; width:400px;">
     <video id="camera" autoplay playsinline></video>
@@ -40,7 +40,7 @@
 </div>
 
 <br>
-<button id="exportBtn" disabled>CSV出力</button>
+<button id="resetBtn">リセット</button>
 <div id="output">読み取り結果：なし</div>
 
 <script src="https://unpkg.com/@zxing/library@latest"></script>
@@ -48,23 +48,29 @@
 const video = document.getElementById("camera");
 const outputDiv = document.getElementById("output");
 const scanFrame = document.getElementById("scan-frame");
-const exportBtn = document.getElementById("exportBtn");
+const resetBtn = document.getElementById("resetBtn");
 
-const reader = new ZXing.BrowserMultiFormatReader();
-let results = [];
-let scanning = true;
-
-// ====== CSV出力 ======
-exportBtn.addEventListener("click", () => {
-    const csvContent = "data:text/csv;charset=utf-8," +
-        results.map(row => row).join("\n");
-
-    const link = document.createElement("a");
-    link.href = encodeURI(csvContent);
-    link.download = "barcode_results.csv";
-    link.click();
+const reader = new ZXing.BrowserMultiFormatReader({
+    // バーコード優先
+    possibleFormats: [
+        ZXing.BarcodeFormat.CODE_128,
+        ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.EAN_13,
+        ZXing.BarcodeFormat.EAN_8
+    ]
 });
 
+let firstScan = null;
+let secondScan = null;
+let scanning = true;
+
+resetBtn.addEventListener("click", () => {
+    firstScan = null;
+    secondScan = null;
+    outputDiv.textContent = "読み取り結果：リセット済み";
+});
+
+// ====== カメラ起動 ======
 async function startCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -84,6 +90,7 @@ async function startCamera() {
     }
 }
 
+// ====== 読み取りループ ======
 function startScanning() {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -107,7 +114,7 @@ function startScanning() {
         try {
             const result = await reader.decodeFromImageUrl(canvas.toDataURL());
             if (result && result.text) {
-                addResult(result.text);
+                processScan(result.text);
             }
         } catch {}
 
@@ -117,12 +124,28 @@ function startScanning() {
     scanLoop();
 }
 
-function addResult(code) {
-    if (!results.includes(code)) {
-        results.push(code);
-        exportBtn.disabled = false;
+// ====== 読み取り結果処理（2回照合） ======
+function processScan(code) {
+    // 1回目の読み取り
+    if (!firstScan) {
+        firstScan = code;
+        outputDiv.textContent = "1回目読み取り：" + code;
+        return;
     }
-    outputDiv.textContent = "読み取り結果：" + code;
+
+    // 2回目の読み取り
+    if (!secondScan) {
+        secondScan = code;
+
+        if (firstScan === secondScan) {
+            outputDiv.textContent =
+                `判定：一致 ✔（${firstScan}）`;
+        } else {
+            outputDiv.textContent =
+                `判定：不一致 ✖（1回目: ${firstScan} / 2回目: ${secondScan}）`;
+        }
+        return;
+    }
 }
 
 startCamera();
