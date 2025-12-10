@@ -69,7 +69,7 @@ video { width: 100%; border-radius: 10px; }
 <h2>手入力検品システム</h2>
 
 <div id="status" class="normal">① 最初に品番を手入力してください</div>
-<input id="manualInput" type="text" placeholder="例：ABC123456" autofocus maxlength="50">
+<input id="manualInput" type="text" placeholder="例：ABC123" autofocus maxlength="50">
 
 <div id="video-container">
   <video id="camera" autoplay playsinline></video>
@@ -83,7 +83,7 @@ video { width: 100%; border-radius: 10px; }
 <h3>履歴</h3>
 <table id="history"></table>
 
-<!-- ▼ フッターメニュー（index.htmlと同じ仕様） -->
+<!-- ▼ フッターメニュー -->
 <div class="navbar">
     <a href="index.html">📷 QR検品</a>
     <a href="tenyuryoku.html" class="active">⌨ 手入力検品</a>
@@ -217,13 +217,37 @@ function compare(scanned) {
   }
 }
 
-// ========= 入力イベント =========
-document.getElementById("manualInput").addEventListener("input", e=>{
-  firstInput = e.target.value.trim();
-  if (firstInput) setStatus("次にQRコードを読み取ってください","normal");
+// ========= 入力イベント（大文字＋数字＋記号のみ / 小文字・全角禁止） =========
+document.getElementById("manualInput").addEventListener("input", e => {
+  let v = e.target.value;
+
+  // ★ 全角禁止：ASCII 0x20〜0x7E 以外を排除
+  if (/[^\x20-\x7E]/.test(v)) {
+    setStatus("❌ 全角は使用できません（半角のみ）", "ng");
+    firstInput = "";
+    return;
+  }
+
+  // ★ 小文字禁止
+  if (/[a-z]/.test(v)) {
+    setStatus("❌ 小文字は使用できません（大文字・数字・記号のみ）", "ng");
+    firstInput = "";
+    return;
+  }
+
+  // ★ 6文字未満禁止
+  if (v.length < 6) {
+    setStatus("❌ 半角6文字以上入力してください", "ng");
+    firstInput = "";
+    return;
+  }
+
+  // ★ 条件クリア
+  firstInput = v;
+  setStatus("次にQRコードを読み取ってください","normal");
 });
 
-// ========= 履歴表示（最新5件まで表示） =========
+// ========= 履歴表示（最新5件まで） =========
 function loadHistory() {
   const tx = db.transaction("records","readonly");
   const req = tx.objectStore("records").getAll();
@@ -233,8 +257,8 @@ function loadHistory() {
     table.innerHTML = "<tr><th>時刻</th><th>入力</th><th>QR</th><th>結果</th></tr>";
 
     req.result
-      .reverse()        // 新しい順に並び替え
-      .slice(0,5)       // 最新5件だけ表示
+      .reverse()
+      .slice(0,5)
       .forEach(r=>{
         table.innerHTML += `
           <tr>
@@ -267,11 +291,7 @@ document.getElementById("exportBtn").addEventListener("click", ()=>{
 // ========= ボタン =========
 document.getElementById("startScanBtn").addEventListener("click", startScan);
 document.getElementById("resetBtn").addEventListener("click", ()=>location.reload());
-
 </script>
+
 </body>
 </html>
-
-
-
-
