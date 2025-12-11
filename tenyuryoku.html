@@ -68,7 +68,7 @@ video { width: 100%; border-radius: 10px; }
 
 <h2>手入力検品システム</h2>
 
-<div id="status" class="normal">① 最初に品番を手入力してください</div>
+<div id="status" class="normal">① 最初に品番・型式を手入力してください</div>
 <input id="manualInput" type="text" placeholder="例：ABC123" autofocus maxlength="50">
 
 <div id="video-container">
@@ -87,6 +87,7 @@ video { width: 100%; border-radius: 10px; }
 <div class="navbar">
     <a href="index.html">📷 QR検品</a>
     <a href="tenyuryoku.html" class="active">⌨ 手入力検品</a>
+  　<a href="scan.html">🏷️ 海外ラベル</a>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
@@ -295,4 +296,5 @@ document.getElementById("resetBtn").addEventListener("click", ()=>location.reloa
 
 </body>
 </html>
+
 
