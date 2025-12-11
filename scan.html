@@ -44,9 +44,8 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 
 <h2>海外ラベル貼り検品</h2>
 
-<div id="status" class="normal">1回目のバーコードを読み取ってください</div>
+<div id="status" class="normal">1回目（7文字以下）を読み取ってください</div>
 
-<!-- ★ 1回目の読み取り内容を表示する領域 -->
 <div id="firstCodeDisplay"></div>
 
 <div id="video-container">
@@ -69,7 +68,7 @@ const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
-// ========== バイブレーション関数 ==========
+// ========== バイブレーション ==========
 function vibrate(pattern) {
     if (navigator.vibrate) navigator.vibrate(pattern);
 }
@@ -84,7 +83,7 @@ const reader = new ZXing.BrowserMultiFormatReader();
 const video = document.getElementById("v");
 const scanFrame = document.getElementById("scan-frame");
 
-// ========== ステータス表示変更 ==========
+// ========== ステータス表示 ==========
 function setStatus(text, type="normal") {
     const s = document.getElementById("status");
     s.textContent = text;
@@ -162,52 +161,64 @@ function stopCamera() {
 function handleScan(code) {
     stopCamera();
 
-    // 読み取り音 + 軽い振動
+    const scanned = code.trim();
+
+    // 読み取り音
     readSound.currentTime = 0;
     readSound.play();
     vibrate(150);
 
-    // ---- 1回目 ----
+    // ======== 1回目（7文字以下）========
     if (step === 1) {
-        firstCode = code.trim();
+        if (scanned.length > 7) {
+            errorSound.play();
+            vibrate([200,100,200]);
+            setStatus("❌ 1回目は7文字以下で読み取ってください", "ng");
+            return;
+        }
 
-        // ★ 画面に1回目のコードを表示
+        firstCode = scanned;
+
         document.getElementById("firstCodeDisplay").textContent =
             "1回目のコード : " + firstCode;
 
-        setStatus("1回目 OK → 2回目を読み取ってください", "normal");
+        setStatus("1回目 OK → 2回目（8文字以上）を読み取ってください", "normal");
         step = 2;
         return;
     }
 
-    // ---- 2回目 ----
-    secondCode = code.trim();
-    const ok = (firstCode === secondCode);
+    // ======== 2回目（8文字以上）========
+    if (step === 2) {
+        if (scanned.length < 8) {
+            errorSound.play();
+            vibrate([200,100,200]);
+            setStatus("❌ 2回目は8文字以上を読み取ってください", "ng");
+            return;
+        }
 
-    if (ok) {
-        successSound.currentTime = 0;
-        successSound.play();
+        secondCode = scanned;
 
-        // ★一致時 強い振動
-        vibrate([200, 100, 200]);
+        // ★ 含まれているかどうかの判定
+        const ok = secondCode.includes(firstCode);
 
-        setStatus("✔ 一致しました！", "ok");
-    } else {
-        errorSound.currentTime = 0;
-        errorSound.play();
+        if (ok) {
+            successSound.play();
+            vibrate([200, 100, 200]);
+            setStatus("✔ 一致（含まれていました）", "ok");
+        } else {
+            errorSound.play();
+            vibrate([300, 120, 300]);
+            setStatus("❌ 不一致（含まれていません）", "ng");
+        }
 
-        // ★不一致時 さらに強く振動
-        vibrate([300, 150, 300]);
+        addHistory(firstCode, secondCode, ok ? "OK" : "NG");
 
-        setStatus("❌ 不一致です", "ng");
+        // スキャンボタンを隠す
+        document.getElementById("scanBtn").style.display = "none";
+
+        step = 3;
+        return;
     }
-
-    addHistory(firstCode, secondCode, ok ? "OK" : "NG");
-
-    step = 3;
-
-    // 2回目終了 → 読み取りボタンを隠す
-    document.getElementById("scanBtn").style.display = "none";
 }
 
 // ========== 最初に戻る ==========
@@ -216,11 +227,8 @@ function resetAll() {
     firstCode = "";
     secondCode = "";
 
-    setStatus("1回目のバーコードを読み取ってください", "normal");
-
-    // ★ 表示していた1回目コードを消す
+    setStatus("1回目（7文字以下）を読み取ってください", "normal");
     document.getElementById("firstCodeDisplay").textContent = "";
-
     document.getElementById("scanBtn").style.display = "block";
 }
 
@@ -269,7 +277,6 @@ function downloadCSV() {
     URL.revokeObjectURL(url);
 }
 
-// ========== ボタンイベント ==========
 document.getElementById("scanBtn").onclick = startScan;
 document.getElementById("resetBtn").onclick = resetAll;
 document.getElementById("csvBtn").onclick = downloadCSV;
@@ -277,4 +284,3 @@ document.getElementById("csvBtn").onclick = downloadCSV;
 </script>
 </body>
 </html>
-
