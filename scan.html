@@ -71,7 +71,7 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 
 <h2>海外ラベル貼り検品</h2>
 
-<div id="status" class="normal">1回目（7文字以下）を読み取ってください</div>
+<div id="status" class="normal">海外パーツラベルの品番を読み取ってください</div>
 
 <div id="firstCodeDisplay"></div>
 
@@ -80,7 +80,7 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
     <div id="scan-frame"></div>
 </div>
 
-<button id="scanBtn">📷 読み取る</button>
+<button id="scanBtn">📷 バーコードを読み取る</button>
 <button id="resetBtn">🔄 最初に戻る</button>
 <button id="csvBtn">📄 CSV出力</button>
 
@@ -216,7 +216,7 @@ function handleScan(code) {
         document.getElementById("firstCodeDisplay").textContent =
             "1回目のコード : " + firstCode;
 
-        setStatus("1回目 OK → 2回目（8文字以上）を読み取ってください", "normal");
+        setStatus("海外パーツラベルの品番を読み取ってください", "normal");
         step = 2;
         return;
     }
@@ -238,11 +238,11 @@ function handleScan(code) {
         if (ok) {
             successSound.play();
             vibrate([200, 100, 200]);
-            setStatus("✔ 一致（含まれていました）", "ok");
+            setStatus("✔ 一致しました！", "ok");
         } else {
             errorSound.play();
             vibrate([300, 120, 300]);
-            setStatus("❌ 不一致（含まれていません）", "ng");
+            setStatus("❌ 不一致です", "ng");
         }
 
         addHistory(firstCode, secondCode, ok ? "OK" : "NG");
@@ -261,7 +261,7 @@ function resetAll() {
     firstCode = "";
     secondCode = "";
 
-    setStatus("1回目（7文字以下）を読み取ってください", "normal");
+    setStatus("海外パーツラベルの品番を読み取ってください", "normal");
     document.getElementById("firstCodeDisplay").textContent = "";
     document.getElementById("scanBtn").style.display = "block";
 }
@@ -318,4 +318,5 @@ document.getElementById("csvBtn").onclick = downloadCSV;
 </script>
 </body>
 </html>
+
 
