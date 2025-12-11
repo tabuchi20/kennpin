@@ -7,10 +7,17 @@
 
 <style>
 body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; margin-bottom:80px; }
-#status { padding: 20px; font-size: 24px; font-weight: bold; border-radius: 12px; text-align: center; margin-bottom: 20px; }
+#status { padding: 20px; font-size: 24px; font-weight: bold; border-radius: 12px; text-align: center; margin-bottom: 10px; }
 .ok { background: green; color: white; }
 .ng { background: red; color: white; }
 .normal { background: #e5e5e5; color: #0066cc; }
+
+#firstCodeDisplay {
+    font-size: 20px;
+    margin-bottom: 20px;
+    color: #333;
+    font-weight: bold;
+}
 
 #video-container { position: relative; width: 100%; max-width: 400px; margin: auto; }
 video { width: 100%; border-radius: 10px; }
@@ -34,8 +41,13 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 </head>
 
 <body>
+
 <h2>バーコード検品（Code128）</h2>
+
 <div id="status" class="normal">1回目のバーコードを読み取ってください</div>
+
+<!-- ★ 1回目の読み取り内容を表示する領域 -->
+<div id="firstCodeDisplay"></div>
 
 <div id="video-container">
     <video id="v" autoplay playsinline></video>
@@ -52,17 +64,17 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 <script src="https://unpkg.com/@zxing/library@latest"></script>
 
 <script>
-// ======== 追加：音声ファイル =========
+// ========== 音声ファイル ==========
 const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
-// ======== 追加：バイブレーション関数 =========
+// ========== バイブレーション関数 ==========
 function vibrate(pattern) {
     if (navigator.vibrate) navigator.vibrate(pattern);
 }
 
-// ======== 変数 =========
+// ========== 変数 ==========
 let step = 1;
 let firstCode = "";
 let secondCode = "";
@@ -72,14 +84,14 @@ const reader = new ZXing.BrowserMultiFormatReader();
 const video = document.getElementById("v");
 const scanFrame = document.getElementById("scan-frame");
 
-// ======== 表示状態変更 =========
+// ========== ステータス表示変更 ==========
 function setStatus(text, type="normal") {
     const s = document.getElementById("status");
     s.textContent = text;
     s.className = type;
 }
 
-// ======== スキャン開始 =========
+// ========== スキャン開始 ==========
 async function startScan() {
     if (scanning) return;
     scanning = true;
@@ -101,7 +113,7 @@ async function startScan() {
     }
 }
 
-// ======== スキャンループ =========
+// ========== スキャンループ ==========
 async function scanLoop() {
     if (!scanning) return;
 
@@ -137,7 +149,7 @@ async function scanLoop() {
     requestAnimationFrame(scanLoop);
 }
 
-// ======== カメラ停止 =========
+// ========== カメラ停止 ==========
 function stopCamera() {
     scanning = false;
     if (video.srcObject) {
@@ -146,59 +158,59 @@ function stopCamera() {
     video.srcObject = null;
 }
 
-// ======== スキャン後処理（音声 + 判定 + ボタン制御 + バイブレーション）=========
+// ========== スキャン後処理 ==========
 function handleScan(code) {
     stopCamera();
 
-    // ★ 共通：読み取り音 + 軽振動
+    // 読み取り音 + 軽い振動
     readSound.currentTime = 0;
     readSound.play();
-    vibrate(150);   // ← 1回目・2回目とも軽い振動
+    vibrate(150);
 
+    // ---- 1回目 ----
     if (step === 1) {
-        // --------------------
-        // 1回目の処理
-        //---------------------
         firstCode = code.trim();
+
+        // ★ 画面に1回目のコードを表示
+        document.getElementById("firstCodeDisplay").textContent =
+            "1回目のコード : " + firstCode;
+
         setStatus("1回目 OK → 2回目を読み取ってください", "normal");
         step = 2;
-
-    } else {
-        // --------------------
-        // 2回目の処理
-        //---------------------
-        secondCode = code.trim();
-        const ok = (firstCode === secondCode);
-
-        if (ok) {
-            successSound.currentTime = 0;
-            successSound.play();
-
-            // ★ 一致 → 強く振動
-            vibrate([200, 100, 200]);
-
-            setStatus("✔ 一致しました！", "ok");
-        } else {
-            errorSound.currentTime = 0;
-            errorSound.play();
-
-            // ★ 不一致 → もっと強く振動
-            vibrate([300, 150, 300]);
-
-            setStatus("❌ 不一致です", "ng");
-        }
-
-        // 履歴記録
-        addHistory(firstCode, secondCode, ok ? "OK" : "NG");
-
-        step = 3;
-
-        // ★ 2回目後：読み取りボタンを隠す
-        document.getElementById("scanBtn").style.display = "none";
+        return;
     }
+
+    // ---- 2回目 ----
+    secondCode = code.trim();
+    const ok = (firstCode === secondCode);
+
+    if (ok) {
+        successSound.currentTime = 0;
+        successSound.play();
+
+        // ★一致時 強い振動
+        vibrate([200, 100, 200]);
+
+        setStatus("✔ 一致しました！", "ok");
+    } else {
+        errorSound.currentTime = 0;
+        errorSound.play();
+
+        // ★不一致時 さらに強く振動
+        vibrate([300, 150, 300]);
+
+        setStatus("❌ 不一致です", "ng");
+    }
+
+    addHistory(firstCode, secondCode, ok ? "OK" : "NG");
+
+    step = 3;
+
+    // 2回目終了 → 読み取りボタンを隠す
+    document.getElementById("scanBtn").style.display = "none";
 }
 
-// ======== 最初に戻る =========
+// ========== 最初に戻る ==========
 function resetAll() {
     step = 1;
     firstCode = "";
@@ -206,11 +218,13 @@ function resetAll() {
 
     setStatus("1回目のバーコードを読み取ってください", "normal");
 
-    // 読み取りボタン再表示
+    // ★ 表示していた1回目コードを消す
+    document.getElementById("firstCodeDisplay").textContent = "";
+
     document.getElementById("scanBtn").style.display = "block";
 }
 
-// ======== 履歴管理 =========
+// ========== 履歴 ==========
 let historyData = [];
 
 function addHistory(f, s, r) {
@@ -226,7 +240,7 @@ function addHistory(f, s, r) {
     const table = document.getElementById("history");
     table.innerHTML = `<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>`;
 
-    historyData.forEach(x=>{
+    historyData.forEach(x => {
         table.innerHTML += `
             <tr>
                 <td>${x.time}</td>
@@ -237,7 +251,7 @@ function addHistory(f, s, r) {
     });
 }
 
-// ======== CSV 出力 =========
+// ========== CSV 出力 ==========
 function downloadCSV() {
     let csv = "時刻,1回目,2回目,結果\n";
     historyData.forEach(row => {
@@ -255,7 +269,7 @@ function downloadCSV() {
     URL.revokeObjectURL(url);
 }
 
-// ======== イベント設定 =========
+// ========== ボタンイベント ==========
 document.getElementById("scanBtn").onclick = startScan;
 document.getElementById("resetBtn").onclick = resetAll;
 document.getElementById("csvBtn").onclick = downloadCSV;
