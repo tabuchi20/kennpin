@@ -57,6 +57,11 @@ const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
+// ======== 追加：バイブレーション関数 =========
+function vibrate(pattern) {
+    if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
 // ======== 変数 =========
 let step = 1;
 let firstCode = "";
@@ -141,37 +146,54 @@ function stopCamera() {
     video.srcObject = null;
 }
 
-// ======== スキャン後処理（音声 + 判定 + ボタン制御） =========
+// ======== スキャン後処理（音声 + 判定 + ボタン制御 + バイブレーション）=========
 function handleScan(code) {
     stopCamera();
 
-    // 共通：読み取り音
+    // ★ 共通：読み取り音 + 軽振動
     readSound.currentTime = 0;
     readSound.play();
+    vibrate(150);   // ← 1回目・2回目とも軽い振動
 
     if (step === 1) {
+        // --------------------
+        // 1回目の処理
+        //---------------------
         firstCode = code.trim();
         setStatus("1回目 OK → 2回目を読み取ってください", "normal");
         step = 2;
 
     } else {
+        // --------------------
+        // 2回目の処理
+        //---------------------
         secondCode = code.trim();
         const ok = (firstCode === secondCode);
 
         if (ok) {
             successSound.currentTime = 0;
             successSound.play();
+
+            // ★ 一致 → 強く振動
+            vibrate([200, 100, 200]);
+
             setStatus("✔ 一致しました！", "ok");
         } else {
             errorSound.currentTime = 0;
             errorSound.play();
+
+            // ★ 不一致 → もっと強く振動
+            vibrate([300, 150, 300]);
+
             setStatus("❌ 不一致です", "ng");
         }
 
+        // 履歴記録
         addHistory(firstCode, secondCode, ok ? "OK" : "NG");
+
         step = 3;
 
-        // ★ 2回目が終わったら「読み取る」ボタンを隠す
+        // ★ 2回目後：読み取りボタンを隠す
         document.getElementById("scanBtn").style.display = "none";
     }
 }
@@ -184,7 +206,7 @@ function resetAll() {
 
     setStatus("1回目のバーコードを読み取ってください", "normal");
 
-    // ★ 読み取りボタンを再表示
+    // 読み取りボタン再表示
     document.getElementById("scanBtn").style.display = "block";
 }
 
