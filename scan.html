@@ -267,30 +267,28 @@ function resetAll() {
 }
 
 // ========== 履歴 ==========
-let historyData = [];
+function loadHistory() {
+  const tx = db.transaction("records","readonly");
+  const req = tx.objectStore("records").getAll();
 
-function addHistory(f, s, r) {
-    historyData.unshift({
-        time: new Date().toLocaleString(),
-        first: f,
-        second: s,
-        result: r
-    });
-
-    historyData = historyData.slice(0,5);
-
+  req.onsuccess = () => {
     const table = document.getElementById("history");
-    table.innerHTML = `<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>`;
+    table.innerHTML = "<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>";
 
-    historyData.forEach(x => {
+    req.result
+      .reverse()
+      .slice(0,5)
+      .forEach(r=>{
         table.innerHTML += `
-            <tr>
-                <td>${x.time}</td>
-                <td>${x.first}</td>
-                <td>${x.second}</td>
-                <td>${x.result}</td>
-            </tr>`;
-    });
+          <tr>
+            <td>${r.time}</td>
+            <td>${r.first}</td>
+            <td>${r.scanned}</td>
+            <td>${r.result}</td>
+          </tr>
+        `;
+      });
+  };
 }
 
 // ========== CSV 出力 ==========
@@ -318,5 +316,6 @@ document.getElementById("csvBtn").onclick = downloadCSV;
 </script>
 </body>
 </html>
+
 
 
