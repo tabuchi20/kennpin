@@ -106,96 +106,163 @@ const errorSound = new Audio("sounds/keikoku.mp3");
 
 const vibrate = p => navigator.vibrate && navigator.vibrate(p);
 
-// ================= 変数 =================
+// ========== 変数 ==========
 let step = 1;
 let firstCode = "";
+let secondCode = "";
 let scanning = false;
 
 const reader = new ZXing.BrowserMultiFormatReader();
 const video = document.getElementById("v");
 const scanFrame = document.getElementById("scan-frame");
 
-// ================= 表示 =================
+// ========== ステータス表示 ==========
 function setStatus(text, type="normal") {
     const s = document.getElementById("status");
     s.textContent = text;
     s.className = type;
 }
 
-// ================= スキャン =================
+// ========== スキャン開始 ==========
 async function startScan() {
     if (scanning) return;
     scanning = true;
 
-    const stream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:"environment"}});
-    video.srcObject = stream;
-    scanLoop();
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: "environment",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        });
+
+        video.srcObject = stream;
+        scanLoop();
+    } catch (e) {
+        alert("カメラが使用できません：" + e.message);
+        scanning = false;
+    }
 }
 
+// ========== スキャンループ ==========
 async function scanLoop() {
     if (!scanning) return;
 
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
 
-    const fr = scanFrame.getBoundingClientRect();
-    const vr = video.getBoundingClientRect();
+    const frameRect = scanFrame.getBoundingClientRect();
+    const videoRect = video.getBoundingClientRect();
 
-    canvas.width = fr.width;
-    canvas.height = fr.height;
+    canvas.width = frameRect.width;
+    canvas.height = frameRect.height;
 
-    const sx = video.videoWidth / vr.width;
-    const sy = video.videoHeight / vr.height;
+    const scaleX = video.videoWidth / videoRect.width;
+    const scaleY = video.videoHeight / videoRect.height;
 
     ctx.drawImage(
         video,
-        (fr.left-vr.left)*sx,
-        (fr.top-vr.top)*sy,
-        fr.width*sx,
-        fr.height*sy,
-        0,0,canvas.width,canvas.height
+        (frameRect.left - videoRect.left) * scaleX,
+        (frameRect.top  - videoRect.top ) * scaleY,
+        frameRect.width  * scaleX,
+        frameRect.height * scaleY,
+        0, 0, canvas.width, canvas.height
     );
 
     try {
-        const r = await reader.decodeFromImageUrl(canvas.toDataURL());
-        if (r?.text) handleScan(r.text.trim());
-    } catch {}
+        const result = await reader.decodeFromImageUrl(canvas.toDataURL());
+        if (result && result.text) {
+            handleScan(result.text);
+            return;
+        }
+    } catch (e) { }
+
     requestAnimationFrame(scanLoop);
 }
 
+// ========== カメラ停止 ==========
 function stopCamera() {
     scanning = false;
-    video.srcObject?.getTracks().forEach(t=>t.stop());
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+    }
+    video.srcObject = null;
 }
 
-// ================= 判定 =================
+// ========== スキャン後処理 ==========
 function handleScan(code) {
     stopCamera();
+
+    const scanned = code.trim();
+
+    // 読み取り音
+    readSound.currentTime = 0;
     readSound.play();
     vibrate(150);
 
+    // ======== 1回目（7文字以下）========
     if (step === 1) {
-        if (code.length > 7) {
+        if (scanned.length > 7) {
             errorSound.play();
-            setStatus("❌ 1回目は7文字以下", "ng");
+            vibrate([200,100,200]);
+            setStatus("❌ 1回目は7文字以下で読み取ってください", "ng");
             return;
         }
-        firstCode = code;
-        document.getElementById("firstCodeDisplay").textContent = "1回目 : " + firstCode;
+
+        firstCode = scanned;
+
+        document.getElementById("firstCodeDisplay").textContent =
+            "1回目のコード : " + firstCode;
+
+        setStatus("海外パーツラベルの品番を読み取ってください", "normal");
         step = 2;
         return;
     }
 
+    // ======== 2回目（8文字以上）========
     if (step === 2) {
-        const ok = code.length >= 8 && code.includes(firstCode);
+        if (scanned.length < 8) {
+            errorSound.play();
+            vibrate([200,100,200]);
+            setStatus("❌ 2回目は8文字以上を読み取ってください", "ng");
+            return;
+        }
 
-        ok ? successSound.play() : errorSound.play();
-        setStatus(ok ? "✔ 一致しました" : "❌ 不一致", ok?"ok":"ng");
+        secondCode = scanned;
 
-        saveHistory(firstCode, code, ok?"OK":"NG");
-        document.getElementById("scanBtn").style.display="none";
+        // ★ 含まれているかどうかの判定
+        const ok = secondCode.includes(firstCode);
+
+        if (ok) {
+            successSound.play();
+            vibrate([200, 100, 200]);
+            setStatus("✔ 一致しました！", "ok");
+        } else {
+            errorSound.play();
+            vibrate([300, 120, 300]);
+            setStatus("❌ 不一致です", "ng");
+        }
+
+        addHistory(firstCode, secondCode, ok ? "OK" : "NG");
+
+        // スキャンボタンを隠す
+        document.getElementById("scanBtn").style.display = "none";
+
         step = 3;
+        return;
     }
+}
+
+// ========== 最初に戻る ==========
+function resetAll() {
+    step = 1;
+    firstCode = "";
+    secondCode = "";
+
+    setStatus("海外パーツラベルの品番を読み取ってください", "normal");
+    document.getElementById("firstCodeDisplay").textContent = "";
+    document.getElementById("scanBtn").style.display = "block";
 }
 
 // ================= IndexedDB保存 =================
@@ -264,3 +331,4 @@ csvBtn.onclick = downloadCSV;
 </script>
 </body>
 </html>
+
