@@ -39,7 +39,7 @@ video { width: 100%; border-radius: 10px; }
 <body>
 
 <h2>QRコード検品</h2>
-<div id="status" class="normal">QRコードを読み取るボタンを押してください</div>
+<div id="status" class="normal">現品票のQRを読み込んでください</div>
 
 <div id="video-container">
     <video id="v" autoplay playsinline></video>
@@ -88,7 +88,7 @@ function setStatus(text, type="normal") {
 
 const video = document.getElementById("v");
 
-// ===== カメラ起動（毎回ボタン押下）=====
+// ===== カメラ起動=====
 async function scan() {
     if (scanning) return;
     scanning = true;
@@ -107,7 +107,7 @@ async function scan() {
     requestAnimationFrame(scanLoop);
 }
 
-// ===== スキャン処理（1回だけ）=====
+// ===== スキャン処理=====
 function scanLoop() {
     if (!scanning || detected) return;
 
@@ -163,7 +163,7 @@ function handleScan(code) {
         firstCode1 = code.substring(28, 38);
         firstCode2 = code.length >= 20 ? code.substring(10, 20) : "";
 
-        setStatus("基準QR登録完了。次もQRコードを読み取るボタンを押してください", "normal");
+        setStatus("パーツラベルのQRコードを読んでください", "normal");
         step = 2;
         return;
     }
@@ -231,7 +231,7 @@ function resetAll() {
     step = 1;
     firstCode1 = "";
     firstCode2 = "";
-    setStatus("QRコードを読み取るボタンを押してください", "normal");
+    setStatus("現品票のQRを読み込んでください", "normal");
 }
 
 // ===== CSV =====
@@ -261,3 +261,4 @@ exportBtn.onclick = exportCSV;
 
 </body>
 </html>
+
