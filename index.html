@@ -84,15 +84,19 @@ video { width: 100%; border-radius: 10px; }
 <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
 
 <script>
+// ===================== 状態 =====================
 let step = 1;
 let firstCode1 = "";
 let firstCode2 = "";
 let scanning = false;
+let detected = false;
 
+// ===================== 音 =====================
 const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
+// ===================== IndexedDB =====================
 let db;
 const req = indexedDB.open("checksDB", 1);
 req.onupgradeneeded = e => {
@@ -104,6 +108,7 @@ req.onsuccess = e => {
     loadHistory();
 };
 
+// ===================== UI =====================
 function setStatus(text, type="normal") {
     const s = document.getElementById("status");
     s.textContent = text;
@@ -111,21 +116,33 @@ function setStatus(text, type="normal") {
 }
 
 const video = document.getElementById("v");
-let detected = false;
 
+// ===================== カメラ起動（元の高精度版） =====================
 async function scan() {
     if (scanning) return;
     scanning = true;
     detected = false;
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } }
-    });
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+                advanced: [{ zoom: 2 }]
+            }
+        });
 
-    video.srcObject = stream;
-    requestAnimationFrame(scanLoop);
+        video.srcObject = stream;
+        requestAnimationFrame(scanLoop);
+
+    } catch (e) {
+        alert("カメラ起動に失敗：" + e.message);
+        scanning = false;
+    }
 }
 
+// ===================== スキャンループ =====================
 function scanLoop() {
     if (!scanning || detected) return;
 
@@ -133,19 +150,20 @@ function scanLoop() {
     const rect  = video.getBoundingClientRect();
 
     const canvas = document.createElement("canvas");
-    canvas.width = frame.width;
+    canvas.width  = frame.width;
     canvas.height = frame.height;
     const ctx = canvas.getContext("2d");
 
-    const sx = video.videoWidth / rect.width;
-    const sy = video.videoHeight / rect.height;
+    const scaleX = video.videoWidth  / rect.width;
+    const scaleY = video.videoHeight / rect.height;
 
-    ctx.drawImage(video,
-        (frame.left-rect.left)*sx,
-        (frame.top-rect.top)*sy,
-        frame.width*sx,
-        frame.height*sy,
-        0,0,canvas.width,canvas.height
+    ctx.drawImage(
+        video,
+        (frame.left - rect.left) * scaleX,
+        (frame.top  - rect.top ) * scaleY,
+        frame.width  * scaleX,
+        frame.height * scaleY,
+        0, 0, canvas.width, canvas.height
     );
 
     const img = ctx.getImageData(0,0,canvas.width,canvas.height);
@@ -160,34 +178,38 @@ function scanLoop() {
     }
 }
 
+// ===================== カメラ停止 =====================
 function stopCamera() {
     scanning = false;
-    video.srcObject?.getTracks().forEach(t=>t.stop());
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+    }
     video.srcObject = null;
 }
 
+// ===================== 業務ロジック =====================
 function handleScan(code) {
     readSound.play();
 
-    /* 1回目：基準QR */
+    // --- 1回目（基準QR） ---
     if (step === 1) {
         if (code.length < 29) {
-            setStatus("バーコードが短すぎます（29文字未満）","ng");
+            setStatus("バーコードが短すぎます（29文字未満）", "ng");
             return;
         }
 
         firstCode1 = code.substring(28, 38);
         firstCode2 = code.length >= 20 ? code.substring(10, 20) : "";
 
-        setStatus("基準QR登録済み → パーツラベルを読み取ってください","normal");
+        setStatus("基準QR登録完了 → パーツラベルを読み取ってください", "normal");
         step = 2;
         return;
     }
 
-    /* 2回目以降：連続判定 */
+    // --- 2回目以降（連続判定） ---
     if (step === 2) {
         if (code.length < 34) {
-            setStatus("バーコードが短すぎます（34文字未満）","ng");
+            setStatus("バーコードが短すぎます（34文字未満）", "ng");
             return;
         }
 
@@ -198,10 +220,10 @@ function handleScan(code) {
             (firstCode2 && secondCode === firstCode2);
 
         if (ok) {
-            setStatus("✔ 一致しました！","ok");
+            setStatus("✔ 一致しました！", "ok");
             successSound.play();
         } else {
-            setStatus("❌ 不一致です","ng");
+            setStatus("❌ 不一致です", "ng");
             errorSound.play();
         }
 
@@ -212,20 +234,22 @@ function handleScan(code) {
         );
 
         loadHistory();
-        setStatus("次のパーツラベルを読み取ってください","normal");
+        setStatus("次のパーツラベルを読み取ってください", "normal");
     }
 }
 
+// ===================== DB保存 =====================
 function saveResult(first, second, result) {
-    const tx = db.transaction("checks","readwrite");
+    const tx = db.transaction("checks", "readwrite");
     tx.objectStore("checks").add({
         time: new Date().toLocaleString(),
         first, second, result
     });
 }
 
+// ===================== 履歴 =====================
 function loadHistory() {
-    const tx = db.transaction("checks","readonly");
+    const tx = db.transaction("checks", "readonly");
     const req = tx.objectStore("checks").getAll();
 
     req.onsuccess = () => {
@@ -243,15 +267,17 @@ function loadHistory() {
     };
 }
 
+// ===================== リセット =====================
 function resetAll() {
     step = 1;
     firstCode1 = "";
     firstCode2 = "";
-    setStatus("現品票のQRコードを読み取ってください","normal");
+    setStatus("現品票のQRコードを読み取ってください", "normal");
 }
 
+// ===================== CSV =====================
 function exportCSV() {
-    const tx = db.transaction("checks","readonly");
+    const tx = db.transaction("checks", "readonly");
     const req = tx.objectStore("checks").getAll();
 
     req.onsuccess = () => {
@@ -260,7 +286,7 @@ function exportCSV() {
             csv += `${r.time},${r.first},${r.second},${r.result}\n`;
         });
 
-        const blob = new Blob([csv],{type:"text/csv"});
+        const blob = new Blob([csv], {type:"text/csv"});
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = "検品履歴.csv";
@@ -268,6 +294,7 @@ function exportCSV() {
     };
 }
 
+// ===================== イベント =====================
 scanBtn.onclick = scan;
 resetBtn.onclick = resetAll;
 exportBtn.onclick = exportCSV;
