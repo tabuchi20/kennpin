@@ -225,7 +225,7 @@ function handleScan(code) {
         if (scanned.length < 8) {
             errorSound.play();
             vibrate([200,100,200]);
-            setStatus("❌ 2回目は8文字以上を読み取ってください", "ng");
+            setStatus("❌ 2回目は貼り付けるパーツラベルを読み取ってください", "ng");
             return;
         }
 
@@ -331,4 +331,5 @@ csvBtn.onclick = downloadCSV;
 </script>
 </body>
 </html>
+
 
