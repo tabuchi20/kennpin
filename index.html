@@ -34,6 +34,31 @@ video { width: 100%; border-radius: 10px; }
   pointer-events: none;
   border-radius: 10px;
 }
+
+  /* ▼ 固定フッターナビ ▼ */
+.navbar {
+    position:fixed;
+    bottom:0;
+    left:0;
+    width:100%;
+    background:#f3f3f3;
+    border-top:2px solid #ccc;
+    display:flex;
+    justify-content:space-around;
+}
+.navbar a {
+    flex:1;
+    text-align:center;
+    padding:15px 0;
+    font-size:18px;
+    text-decoration:none;
+    color:#333;
+}
+.navbar a.active {
+    background:#0078ff;
+    color:white;
+    font-weight:bold;
+}
 </style>
 </head>
 <body>
@@ -52,6 +77,13 @@ video { width: 100%; border-radius: 10px; }
 
 <h3>履歴</h3>
 <table id="history"></table>
+
+  <!-- ▼ ページ切替ナビ ▼ -->
+<div class="navbar">
+    <a href="index.html" class="active">📷 QR検品</a>
+    <a href="tenyuryoku.html">⌨ 手入力検品</a>
+　  <a href="scan.html">🏷️ 海外ラベル</a>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
 
@@ -261,4 +293,5 @@ exportBtn.onclick = exportCSV;
 
 </body>
 </html>
+
 
