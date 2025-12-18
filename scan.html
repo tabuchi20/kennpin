@@ -12,12 +12,7 @@ body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; margin-bot
 .ng { background: red; color: white; }
 .normal { background: #e5e5e5; color: #0066cc; }
 
-#firstCodeDisplay {
-    font-size: 20px;
-    margin-bottom: 20px;
-    color: #333;
-    font-weight: bold;
-}
+#firstCodeDisplay { font-size: 20px; margin-bottom: 20px; font-weight: bold; }
 
 #video-container { position: relative; width: 100%; max-width: 400px; margin: auto; }
 video { width: 100%; border-radius: 10px; }
@@ -38,17 +33,13 @@ button { width: 100%; font-size: 20px; padding: 15px; margin-top: 20px; border-r
 table { width: 100%; margin-top: 20px; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 
-    /* ===== 共通フッターナビ ===== */
 .navbar {
     position:fixed;
-    bottom:0;
-    left:0;
+    bottom:0; left:0;
     width:100%;
     background:#f3f3f3;
     border-top:2px solid #ccc;
     display:flex;
-    justify-content:space-around;
-    z-index:9999;
 }
 .navbar a {
     flex:1;
@@ -63,7 +54,6 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
     color:white;
     font-weight:bold;
 }
-    
 </style>
 </head>
 
@@ -72,7 +62,6 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 <h2>海外ラベル貼り検品</h2>
 
 <div id="status" class="normal">海外パーツラベルの品番を読み取ってください</div>
-
 <div id="firstCodeDisplay"></div>
 
 <div id="video-container">
@@ -87,25 +76,35 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 <h3>履歴（最新5件）</h3>
 <table id="history"></table>
 
-    <!-- ▼ フッターメニュー -->
 <div class="navbar">
     <a href="index.html">📷 QR検品</a>
     <a href="tenyuryoku.html">⌨ 手入力検品</a>
-  　<a href="scan.html" class="active">🏷️ 海外ラベル</a>
+    <a href="scan.html" class="active">🏷️ 海外ラベル</a>
 </div>
 
-<script src="https://unpkg.com/@zxing/library@latest"></script>
+<script src="js/zxing.min.js"></script>
 
 <script>
-// ========== 音声ファイル ==========
+// ================= IndexedDB =================
+let db;
+const request = indexedDB.open("barcodeDB", 1);
+
+request.onupgradeneeded = e => {
+    db = e.target.result;
+    db.createObjectStore("records", { keyPath: "id", autoIncrement: true });
+};
+
+request.onsuccess = e => {
+    db = e.target.result;
+    loadHistory();
+};
+
+// ================= 音・振動 =================
 const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
-// ========== バイブレーション ==========
-function vibrate(pattern) {
-    if (navigator.vibrate) navigator.vibrate(pattern);
-}
+const vibrate = p => navigator.vibrate && navigator.vibrate(p);
 
 // ========== 変数 ==========
 let step = 1;
@@ -226,7 +225,7 @@ function handleScan(code) {
         if (scanned.length < 8) {
             errorSound.play();
             vibrate([200,100,200]);
-            setStatus("❌ 2回目は8文字以上を読み取ってください", "ng");
+            setStatus("❌ 2回目は貼り付けるパーツラベルを読み取ってください", "ng");
             return;
         }
 
@@ -266,56 +265,88 @@ function resetAll() {
     document.getElementById("scanBtn").style.display = "block";
 }
 
-// ========== 履歴 ==========
-let historyData = [];
-
-function addHistory(f, s, r) {
-    historyData.unshift({
+// ================= IndexedDB保存 =================
+function saveHistory(first, second, result) {
+    const tx = db.transaction("records","readwrite");
+    tx.objectStore("records").add({
         time: new Date().toLocaleString(),
-        first: f,
-        second: s,
-        result: r
+        first, second, result
     });
+    tx.oncomplete = loadHistory;
+}
 
-    historyData = historyData.slice(0,5);
+// ================= 履歴表示 =================
+function loadHistory() {
+    const tx = db.transaction("records","readonly");
+    const req = tx.objectStore("records").getAll();
 
-    const table = document.getElementById("history");
-    table.innerHTML = `<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>`;
+    req.onsuccess = () => {
+        const table = document.getElementById("history");
+        table.innerHTML = "<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>";
 
-    historyData.forEach(x => {
-        table.innerHTML += `
+        req.result.slice(-5).reverse().forEach(r=>{
+            table.innerHTML += `
             <tr>
-                <td>${x.time}</td>
-                <td>${x.first}</td>
-                <td>${x.second}</td>
-                <td>${x.result}</td>
+              <td>${r.time}</td>
+              <td>${r.first}</td>
+              <td>${r.second}</td>
+              <td>${r.result}</td>
             </tr>`;
-    });
+        });
+    };
 }
 
-// ========== CSV 出力 ==========
+// ================= CSV出力 =================
 function downloadCSV() {
-    let csv = "時刻,1回目,2回目,結果\n";
-    historyData.forEach(row => {
-        csv += `${row.time},${row.first},${row.second},${row.result}\n`;
-    });
+    const tx = db.transaction("records","readonly");
+    const req = tx.objectStore("records").getAll();
 
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
+    req.onsuccess = () => {
+        let csv = "時刻,1回目,2回目,結果\n";
+        req.result.forEach(r=>{
+            csv += `${r.time},${r.first},${r.second},${r.result}\n`;
+        });
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "barcode_history.csv";
-    a.click();
-
-    URL.revokeObjectURL(url);
+        const blob = new Blob([csv],{type:"text/csv"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "barcode_history.csv";
+        a.click();
+    };
 }
 
-document.getElementById("scanBtn").onclick = startScan;
-document.getElementById("resetBtn").onclick = resetAll;
-document.getElementById("csvBtn").onclick = downloadCSV;
+// ================= リセット =================
+function resetAll() {
+    // カメラ停止
+    stopCamera();
 
+    // 状態リセット
+    step = 1;
+    firstCode = "";
+    secondCode = "";
+    scanning = false;
+
+    // UI初期化
+    setStatus("海外パーツラベルの品番を読み取ってください", "normal");
+    document.getElementById("firstCodeDisplay").textContent = "";
+    document.getElementById("scanBtn").style.display = "block";
+}
+
+
+// ================= イベント =================
+scanBtn.onclick = startScan;
+resetBtn.onclick = resetAll;
+csvBtn.onclick = downloadCSV;
 </script>
+  <script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
 </body>
 </html>
+
+
+
 
