@@ -1,7 +1,11 @@
-const CACHE_NAME = "qr-check-v1";
+const CACHE_NAME = "qr-check-v2";
+
 const URLS_TO_CACHE = [
   "./",
   "./index.html",
+  "./tenyuryoku.html",
+  "./scan.html",
+
   "./manifest.webmanifest",
   "./service-worker.js",
 
@@ -14,15 +18,3 @@ const URLS_TO_CACHE = [
   "./icon/favicon.png",
   "./icon/icon-180.png"
 ];
-
-self.addEventListener("install", event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(URLS_TO_CACHE))
-  );
-});
-
-self.addEventListener("fetch", event => {
-  event.respondWith(
-    caches.match(event.request).then(res => res || fetch(event.request))
-  );
-});
