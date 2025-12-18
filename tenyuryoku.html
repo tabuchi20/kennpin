@@ -291,7 +291,27 @@ document.getElementById("exportBtn").addEventListener("click", ()=>{
 
 // ========= ボタン =========
 document.getElementById("startScanBtn").addEventListener("click", startScan);
-document.getElementById("resetBtn").addEventListener("click", ()=>location.reload());
+document.getElementById("resetBtn").addEventListener("click", resetAll);
+
+function resetAll() {
+  // カメラ停止
+  stopCamera();
+
+  // 変数リセット
+  firstInput = "";
+  scanning = false;
+  detected = false;
+
+  // UI初期化
+  document.getElementById("manualInput").value = "";
+  document.getElementById("manualInput").focus();
+
+  setStatus("① 最初に品番・型式を手入力してください", "normal");
+
+  // 枠を戻す（念のため）
+  document.getElementById("scan-frame").style.display = "block";
+}
+
 </script>
 <script>
 if ("serviceWorker" in navigator) {
@@ -301,6 +321,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
