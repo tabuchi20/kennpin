@@ -36,16 +36,18 @@ video { width: 100%; border-radius: 10px; }
   pointer-events: none;
   border-radius: 10px;
 }
-
 /* ===== 共通フッターナビ ===== */
-navbar {
+.navbar {
     position:fixed;
-    bottom:0; left:0;
+    bottom:0;
+    left:0;
     width:100%;
     background:#f3f3f3;
     border-top:2px solid #ccc;
     display:flex;
+    z-index:9999;
 }
+
 .navbar a {
     flex:1;
     text-align:center;
@@ -54,11 +56,13 @@ navbar {
     text-decoration:none;
     color:#333;
 }
+
 .navbar a.active {
     background:#0078ff;
     color:white;
     font-weight:bold;
 }
+
 </style>
 </head>
 <body>
@@ -318,6 +322,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
