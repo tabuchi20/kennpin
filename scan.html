@@ -317,12 +317,21 @@ function downloadCSV() {
 
 // ================= リセット =================
 function resetAll() {
+    // カメラ停止
+    stopCamera();
+
+    // 状態リセット
     step = 1;
     firstCode = "";
-    setStatus("海外パーツラベルの品番を読み取ってください");
-    document.getElementById("firstCodeDisplay").textContent="";
-    document.getElementById("scanBtn").style.display="block";
+    secondCode = "";
+    scanning = false;
+
+    // UI初期化
+    setStatus("海外パーツラベルの品番を読み取ってください", "normal");
+    document.getElementById("firstCodeDisplay").textContent = "";
+    document.getElementById("scanBtn").style.display = "block";
 }
+
 
 // ================= イベント =================
 scanBtn.onclick = startScan;
@@ -337,6 +346,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
