@@ -293,9 +293,15 @@ document.getElementById("exportBtn").addEventListener("click", ()=>{
 document.getElementById("startScanBtn").addEventListener("click", startScan);
 document.getElementById("resetBtn").addEventListener("click", ()=>location.reload());
 </script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
 
 </body>
 </html>
+
 
 
 
