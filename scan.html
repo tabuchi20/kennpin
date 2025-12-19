@@ -58,9 +58,61 @@ button {
   color:white;
   font-weight:bold;
 }
+
+/* ===== 改修中オーバーレイ ===== */
+#maintenanceOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  color: #fff;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+#maintenanceOverlay .overlay-content {
+  padding: 30px;
+  border-radius: 12px;
+  background: #222;
+  max-width: 90%;
+}
+
+#maintenanceOverlay h2 {
+  font-size: 24px;
+  margin-bottom: 15px;
+}
+
+#maintenanceOverlay p {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+#maintenanceOverlay .tap {
+  margin-top: 20px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #4da3ff;
+}
+
 </style>
 </head>
 
+<!-- ===== 改修中オーバーレイ ===== -->
+<div id="maintenanceOverlay">
+  <div class="overlay-content">
+    <h2>現在改修中です</h2>
+    <p>
+      システム調整のため一時的に<br>
+      表示制限を行っています。
+    </p>
+    <p class="tap">
+      ▶ 画面をタップして起動
+    </p>
+  </div>
+</div>
+  
 <body>
 
 <h2>海外ラベル貼り検品</h2>
@@ -162,5 +214,17 @@ if ("serviceWorker" in navigator) {
 }
 </script>
 
+<script>
+document.getElementById("maintenanceOverlay").addEventListener("click", () => {
+  // オーバーレイを消す
+  document.getElementById("maintenanceOverlay").style.display = "none";
+
+  // 必要ならここで初期処理を開始
+  // 例：入力欄を有効にする、カメラ準備など
+});
+</script>
+
+  
 </body>
 </html>
+
