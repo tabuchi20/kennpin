@@ -20,8 +20,19 @@ body {
 input { width: 90%; font-size: 24px; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #888; }
 button { width: 100%; font-size: 20px; padding: 15px; margin-top: 10px; border-radius: 10px; }
 
-table { width: 100%; margin-top: 20px; border-collapse: collapse; background:white; }
-th, td { border-bottom: 1px solid #ddd; padding: 6px; vertical-align: top; }
+table {
+  width: 100%;
+  margin-top: 20px;
+  border-collapse: collapse;
+  background: white;
+}
+
+th, td {
+  border-bottom: 1px solid #ddd;
+  padding: 6px;
+  vertical-align: top;
+  word-break: break-all; /* 横はみ出し防止のみ */
+}
 
 #video-container { position: relative; width: 100%; max-width: 400px; margin: auto; }
 video { width: 100%; border-radius: 10px; }
@@ -37,44 +48,35 @@ video { width: 100%; border-radius: 10px; }
   border-radius: 10px;
 }
 
-/* ===== フッター ===== */
+/* ===== 共通フッターナビ ===== */
 .navbar {
-  position:fixed;
-  bottom:0;
-  left:0;
-  width:100%;
-  background:#f3f3f3;
-  border-top:2px solid #ccc;
-  display:flex;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: #f3f3f3;
+  border-top: 2px solid #ccc;
+  display: flex;
 }
 
 .navbar a {
-  flex:1;
-  text-align:center;
-  padding:15px 0;
-  font-size:15px;
-  text-decoration:none;
-  color:#333;
+  flex: 1;
+  text-align: center;
+  padding: 15px 0;
+  font-size: 15px;
+  text-decoration: none;
+  color: #333;
 }
 
 .navbar a.active {
-  background:#0078ff;
-  color:white;
-  font-weight:bold;
+  background: #0078ff;
+  color: white;
+  font-weight: bold;
 }
 
-/* ===== Android横はみ出し防止 ===== */
-body { overflow-x: hidden; }
-
-/* ===== 履歴テーブル修正 ===== */
-#history {
-  table-layout: auto; /* ← fixedをやめる */
-}
-
-#history th:nth-child(3),
-#history td:nth-child(3) {
-  font-size: 12px;          /* QR列だけ小さく */
-  word-break: break-all;
+/* ===== Android対策：横スクロール防止 ===== */
+body {
+  overflow-x: hidden;
 }
 </style>
 </head>
@@ -107,13 +109,16 @@ body { overflow-x: hidden; }
 <script src="js/jsQR.js"></script>
 
 <script>
+// ========= 検品用変数 =========
 let firstInput = "";
 let scanning = false;
 let detected = false;
 
+// ========= 音声 =========
 const beepOk = new Audio("sounds/seikou.mp3");
 const beepNg = new Audio("sounds/keikoku.mp3");
 
+// ========= IndexedDB =========
 let db;
 const req = indexedDB.open("QR_Inspection_DB", 1);
 
@@ -138,13 +143,14 @@ function saveResult(first, scanned, result) {
   setTimeout(loadHistory, 300);
 }
 
+// ========= UI制御 =========
 function setStatus(text, type="normal") {
   const s = document.getElementById("status");
   s.textContent = text;
   s.className = type;
 }
 
-/* ===== 履歴表示（QRを40文字に制限） ===== */
+// ========= 履歴表示（元のシンプル表示） =========
 function loadHistory() {
   const tx = db.transaction("records","readonly");
   const req = tx.objectStore("records").getAll();
@@ -153,20 +159,19 @@ function loadHistory() {
     const table = document.getElementById("history");
     table.innerHTML = "<tr><th>時刻</th><th>入力</th><th>QR</th><th>結果</th></tr>";
 
-    req.result.reverse().slice(0,5).forEach(r => {
-      const qrShort = r.scanned.length > 40
-        ? r.scanned.slice(0,40) + "…"
-        : r.scanned;
-
-      table.innerHTML += `
-        <tr>
-          <td>${r.time}</td>
-          <td>${r.first}</td>
-          <td title="${r.scanned}">${qrShort}</td>
-          <td>${r.result}</td>
-        </tr>
-      `;
-    });
+    req.result
+      .reverse()
+      .slice(0,5)
+      .forEach(r => {
+        table.innerHTML += `
+          <tr>
+            <td>${r.time}</td>
+            <td>${r.first}</td>
+            <td>${r.scanned}</td>
+            <td>${r.result}</td>
+          </tr>
+        `;
+      });
   };
 }
 </script>
