@@ -63,6 +63,20 @@ video { width: 100%; border-radius: 10px; }
     font-weight:bold;
 }
 
+  /* ===== 履歴テーブルは画面幅固定 ===== */
+#history {
+  width: 100%;
+  table-layout: fixed; /* ★ 重要：列幅固定 */
+}
+
+/* ===== セル内で折り返し ===== */
+#history th,
+#history td {
+  word-break: break-all;   /* 長い英数字を強制改行 */
+  white-space: normal;     /* 折り返し許可 */
+  font-size: 14px;         /* 少し小さくして視認性UP */
+}
+
 </style>
 </head>
 <body>
@@ -323,6 +337,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
