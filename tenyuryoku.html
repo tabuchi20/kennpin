@@ -63,19 +63,26 @@ video { width: 100%; border-radius: 10px; }
     font-weight:bold;
 }
 
-  /* ===== 履歴テーブルは画面幅固定 ===== */
-#history {
-  width: 100%;
-  table-layout: fixed; /* ★ 重要：列幅固定 */
+/* ===== Android対策：横はみ出し完全防止 ===== */
+body {
+  overflow-x: hidden; /* 念のため全体の横スクロール禁止 */
 }
 
-/* ===== セル内で折り返し ===== */
+#history {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+}
+
 #history th,
 #history td {
-  word-break: break-all;   /* 長い英数字を強制改行 */
-  white-space: normal;     /* 折り返し許可 */
-  font-size: 14px;         /* 少し小さくして視認性UP */
+  max-width: 0;               /* ★ Android Chromeで必須 */
+  word-break: break-all;
+  overflow-wrap: anywhere;    /* ★ Android対策の決定打 */
+  white-space: normal;
+  overflow: hidden;
 }
+
 
 </style>
 </head>
@@ -337,6 +344,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
