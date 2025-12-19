@@ -1,4 +1,4 @@
-const CACHE_NAME = "qr-check-v6";
+const CACHE_NAME = "qr-check-v7";
 
 const URLS_TO_CACHE = [
   "./",
