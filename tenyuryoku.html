@@ -304,9 +304,10 @@ function resetAll() {
   detected = false;
 
   // UI初期化
-  document.getElementById("manualInput").value = "";
-  document.getElementById("manualInput").focus();
+  const input = document.getElementById("manualInput");
+  input.value = "";
 
+  input.blur();
   setStatus("① 最初に品番・型式を手入力してください", "normal");
 
   // 枠を戻す（念のため）
@@ -322,6 +323,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
