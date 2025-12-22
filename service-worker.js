@@ -1,13 +1,10 @@
-const CACHE_NAME = "qr-check-v9";
+const CACHE_NAME = "qr-check-V10";
 
 const URLS_TO_CACHE = [
   "./",
   "./index.html",
   "./tenyuryoku.html",   // ← 手入力検品
   "./scan.html",         // ← 海外ラベル
-
-  "./manifest.webmanifest",
-  "./service-worker.js",
 
   "./js/jsQR.js",
   "./js/zxing.min.js",
@@ -23,7 +20,7 @@ const URLS_TO_CACHE = [
 // インストール時：キャッシュ
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(CACHE_FILES))
+    caches.open(CACHE_NAME).then(cache => cache.addAll(URLS_TO_CACHE))
   );
 });
 
@@ -38,11 +35,18 @@ self.addEventListener("activate", event => {
   );
 });
 
-// 通信時：キャッシュ優先
+// fetch：キャッシュ優先 + ナビゲーション対策
 self.addEventListener("fetch", event => {
   event.respondWith(
     caches.match(event.request).then(res => {
-      return res || fetch(event.request);
+      if (res) return res;
+      return fetch(event.request).catch(() => {
+        // HTML遷移時のフォールバック（Android対策）
+        if (event.request.mode === "navigate") {
+          return caches.match("./index.html");
+        }
+      });
     })
   );
 });
+
