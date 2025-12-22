@@ -6,97 +6,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; margin-bottom:80px; }
-#status { padding: 20px; font-size: 24px; font-weight: bold; border-radius: 12px; text-align: center; margin-bottom: 10px; }
-.ok { background: green; color: white; }
-.ng { background: red; color: white; }
-.normal { background: #e5e5e5; color: #0066cc; }
+body { font-family:-apple-system,BlinkMacSystemFont; padding:20px; margin-bottom:80px; }
+#status { padding:20px; font-size:24px; font-weight:bold; border-radius:12px; text-align:center; margin-bottom:10px; }
+.ok { background:green; color:white; }
+.ng { background:red; color:white; }
+.normal { background:#e5e5e5; color:#0066cc; }
 
-#firstCodeDisplay { font-size: 20px; margin-bottom: 20px; font-weight: bold; }
+#firstCodeDisplay { font-size:20px; margin-bottom:20px; font-weight:bold; }
 
-#video-container { position: relative; width: 100%; max-width: 400px; margin: auto; }
-video { width: 100%; border-radius: 10px; }
+#video-container { position:relative; width:100%; max-width:400px; margin:auto; }
+video { width:100%; border-radius:10px; background:#000; }
 
 #scan-frame {
-  width: 260px;
-  height: 160px;
-  border: 3px solid rgba(255,0,0,0.8);
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  border-radius: 10px;
+  width:260px; height:160px;
+  border:3px solid rgba(255,0,0,.8);
+  position:absolute;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  border-radius:10px;
 }
 
-button { width: 100%; font-size: 20px; padding: 15px; margin-top: 20px; border-radius: 10px; }
+button { width:100%; font-size:20px; padding:15px; margin-top:20px; border-radius:10px; }
 
-table { width: 100%; margin-top: 20px; border-collapse: collapse; }
-th, td { border-bottom: 1px solid #ddd; padding: 8px; }
+table { width:100%; margin-top:20px; border-collapse:collapse; }
+th,td { border-bottom:1px solid #ddd; padding:8px; }
 
 .navbar {
-  position:fixed;
-  bottom:0; left:0;
-  width:100%;
-  background:#f3f3f3;
+  position:fixed; bottom:0; left:0;
+  width:100%; background:#f3f3f3;
   border-top:2px solid #ccc;
   display:flex;
 }
 .navbar a {
-  flex:1;
-  text-align:center;
-  padding:15px 0;
-  font-size:18px;
-  text-decoration:none;
-  color:#333;
+  flex:1; text-align:center;
+  padding:15px 0; font-size:18px;
+  text-decoration:none; color:#333;
 }
 .navbar a.active {
-  background:#0078ff;
-  color:white;
-  font-weight:bold;
-}
-
-/* ===== 改修中オーバーレイ ===== */
-#maintenanceOverlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.85);
-  color: #fff;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-#maintenanceOverlay .overlay-content {
-  padding: 30px;
-  border-radius: 12px;
-  background: #222;
-  max-width: 90%;
-}
-#maintenanceOverlay h2 {
-  font-size: 24px;
-  margin-bottom: 15px;
-}
-#maintenanceOverlay p {
-  font-size: 16px;
-  margin-bottom: 10px;
-}
-#maintenanceOverlay .tap {
-  margin-top: 20px;
-  font-size: 18px;
-  font-weight: bold;
-  color: #4da3ff;
+  background:#0078ff; color:white; font-weight:bold;
 }
 </style>
 </head>
-
-<div id="maintenanceOverlay">
-  <div class="overlay-content">
-    <h2>現在改修中です</h2>
-    <p>システム調整のため一時的に<br>表示制限を行っています。</p>
-    <p class="tap">▶ 画面をタップして起動</p>
-  </div>
-</div>
 
 <body>
 
@@ -106,7 +57,7 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 <div id="firstCodeDisplay"></div>
 
 <div id="video-container">
-  <video id="v" autoplay playsinline></video>
+  <video id="v" playsinline></video>
   <div id="scan-frame"></div>
 </div>
 
@@ -126,179 +77,157 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 <script src="js/zxing.min.js"></script>
 
 <script>
-// ================= IndexedDB =================
+// ===== IndexedDB =====
 let db;
-const request = indexedDB.open("barcodeDB", 1);
-
-request.onupgradeneeded = e => {
-  db = e.target.result;
-  db.createObjectStore("records", { keyPath: "id", autoIncrement: true });
-};
-request.onsuccess = e => {
+indexedDB.open("barcodeDB",1).onsuccess = e => {
   db = e.target.result;
   loadHistory();
 };
 
-// ================= 音・振動 =================
+// ===== 音 =====
 const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
-const vibrate = p => navigator.vibrate && navigator.vibrate(p);
 
-// ========== 変数 ==========
+// ===== 変数 =====
 let step = 1;
 let firstCode = "";
-let secondCode = "";
 let scanning = false;
 
-const reader = new ZXing.BrowserMultiFormatReader();
+// ★ バーコード形式を明示（超重要）
+const hints = new Map();
+hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+  ZXing.BarcodeFormat.CODE_128,
+  ZXing.BarcodeFormat.CODE_39,
+  ZXing.BarcodeFormat.EAN_13,
+  ZXing.BarcodeFormat.EAN_8,
+  ZXing.BarcodeFormat.ITF
+]);
+
+const reader = new ZXing.BrowserMultiFormatReader(hints, 300);
 const video = document.getElementById("v");
 
-// ========== ステータス ==========
-function setStatus(text, type="normal") {
-  const s = document.getElementById("status");
-  s.textContent = text;
-  s.className = type;
+// ===== 表示 =====
+function setStatus(t,c="normal"){
+  status.textContent=t;
+  status.className=c;
 }
 
-// ========== カメラ開始（★Android/iPhone両対応） ==========
-async function startScan() {
-  if (scanning) return;
+// ===== スキャン開始（完全対応）=====
+async function startScan(){
+  if(scanning) return;
   scanning = true;
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } }
+  try{
+    await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ ideal:"environment" } }
     });
 
-    video.srcObject = stream;
+    video.setAttribute("autoplay", true);
+    video.setAttribute("muted", true);
+    await video.play();
 
-    reader.decodeFromVideoElement(video, (result, err) => {
-      if (result) {
+    reader.decodeFromVideoDevice(null, video, (result, err)=>{
+      if(result){
         handleScan(result.text);
       }
     });
 
-  } catch (e) {
-    alert("カメラが使用できません：" + e.message);
+  }catch(e){
+    alert(e.name + " : " + e.message);
     scanning = false;
   }
 }
 
-// ========== カメラ停止 ==========
-function stopCamera() {
+// ===== 停止 =====
+function stopCamera(){
   scanning = false;
   reader.reset();
-  if (video.srcObject) {
-    video.srcObject.getTracks().forEach(t => t.stop());
+  if(video.srcObject){
+    video.srcObject.getTracks().forEach(t=>t.stop());
   }
   video.srcObject = null;
 }
 
-// ========== スキャン後処理 ==========
-function handleScan(code) {
+// ===== 判定 =====
+function handleScan(code){
   stopCamera();
-
-  const scanned = code.trim();
-  readSound.currentTime = 0;
   readSound.play();
-  vibrate(150);
 
-  if (step === 1) {
-    if (scanned.length > 7) {
+  const v = code.trim();
+
+  if(step===1){
+    if(v.length>7){
       errorSound.play();
-      setStatus("❌ 1回目は7文字以下で読み取ってください", "ng");
+      setStatus("❌ 1回目は7文字以下","ng");
       return;
     }
-    firstCode = scanned;
-    document.getElementById("firstCodeDisplay").textContent = "1回目のコード : " + firstCode;
+    firstCode=v;
+    firstCodeDisplay.textContent="1回目のコード : "+v;
     setStatus("海外パーツラベルの品番を読み取ってください");
-    step = 2;
+    step=2;
     return;
   }
 
-  if (step === 2) {
-    if (scanned.length < 8) {
-      errorSound.play();
-      setStatus("❌ 2回目は貼り付けるパーツラベルを読み取ってください", "ng");
-      return;
-    }
-    secondCode = scanned;
-    const ok = secondCode.includes(firstCode);
-
-    if (ok) {
-      successSound.play();
-      setStatus("✔ 一致しました！", "ok");
-    } else {
-      errorSound.play();
-      setStatus("❌ 不一致です", "ng");
-    }
-
-    saveHistory(firstCode, secondCode, ok ? "OK" : "NG");
-    document.getElementById("scanBtn").style.display = "none";
-    step = 3;
+  if(step===2){
+    const ok = v.includes(firstCode);
+    setStatus(ok?"✔ 一致しました！":"❌ 不一致です", ok?"ok":"ng");
+    saveHistory(firstCode,v,ok?"OK":"NG");
+    scanBtn.style.display="none";
+    step=3;
   }
 }
 
-// ========== リセット ==========
-function resetAll() {
+// ===== リセット =====
+function resetAll(){
   stopCamera();
-  step = 1;
-  firstCode = "";
+  step=1;
+  firstCode="";
   setStatus("海外パーツラベルの品番を読み取ってください");
-  document.getElementById("firstCodeDisplay").textContent = "";
-  document.getElementById("scanBtn").style.display = "block";
+  firstCodeDisplay.textContent="";
+  scanBtn.style.display="block";
 }
 
-// ================= IndexedDB =================
-function saveHistory(first, second, result) {
-  const tx = db.transaction("records","readwrite");
+// ===== 履歴 =====
+function saveHistory(first,second,result){
+  const tx=db.transaction("records","readwrite");
   tx.objectStore("records").add({
-    time: new Date().toLocaleString(),
-    first, second, result
+    time:new Date().toLocaleString(),
+    first,second,result
   });
-  tx.oncomplete = loadHistory;
+  tx.oncomplete=loadHistory;
 }
 
-function loadHistory() {
-  const tx = db.transaction("records","readonly");
-  const req = tx.objectStore("records").getAll();
-  req.onsuccess = () => {
-    const table = document.getElementById("history");
-    table.innerHTML = "<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>";
+function loadHistory(){
+  if(!db) return;
+  const tx=db.transaction("records","readonly");
+  const req=tx.objectStore("records").getAll();
+  req.onsuccess=()=>{
+    history.innerHTML="<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>";
     req.result.slice(-5).reverse().forEach(r=>{
-      table.innerHTML += `<tr>
-        <td>${r.time}</td><td>${r.first}</td><td>${r.second}</td><td>${r.result}</td>
-      </tr>`;
+      history.innerHTML+=`<tr><td>${r.time}</td><td>${r.first}</td><td>${r.second}</td><td>${r.result}</td></tr>`;
     });
   };
 }
 
-// ================= CSV =================
-function downloadCSV() {
-  const tx = db.transaction("records","readonly");
-  const req = tx.objectStore("records").getAll();
-  req.onsuccess = () => {
-    let csv = "時刻,1回目,2回目,結果\n";
+// ===== CSV =====
+csvBtn.onclick=()=>{
+  const tx=db.transaction("records","readonly");
+  const req=tx.objectStore("records").getAll();
+  req.onsuccess=()=>{
+    let csv="時刻,1回目,2回目,結果\n";
     req.result.forEach(r=>{
-      csv += `${r.time},${r.first},${r.second},${r.result}\n`;
+      csv+=`${r.time},${r.first},${r.second},${r.result}\n`;
     });
-    const blob = new Blob([csv],{type:"text/csv"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "barcode_history.csv";
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+    a.download="barcode_history.csv";
     a.click();
   };
-}
-
-// ================= イベント =================
-scanBtn.onclick = startScan;
-resetBtn.onclick = resetAll;
-csvBtn.onclick = downloadCSV;
-
-document.getElementById("maintenanceOverlay").onclick = () => {
-  document.getElementById("maintenanceOverlay").style.display = "none";
 };
+
+scanBtn.onclick=startScan;
+resetBtn.onclick=resetAll;
 </script>
 
 </body>
