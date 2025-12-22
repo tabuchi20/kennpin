@@ -15,7 +15,8 @@ body { font-family:-apple-system,BlinkMacSystemFont; padding:20px; margin-bottom
 #firstCodeDisplay { font-size:20px; margin-bottom:20px; font-weight:bold; }
 
 #video-container { position:relative; width:100%; max-width:400px; margin:auto; }
-video { width:100%; border-radius:10px; background:#000; }
+#interactive { position:relative; width:100%; }
+#interactive video { width:100%; border-radius:10px; }
 
 #scan-frame {
   width:260px; height:160px;
@@ -25,6 +26,7 @@ video { width:100%; border-radius:10px; background:#000; }
   transform:translate(-50%,-50%);
   pointer-events:none;
   border-radius:10px;
+  z-index:10;
 }
 
 button { width:100%; font-size:20px; padding:15px; margin-top:20px; border-radius:10px; }
@@ -46,40 +48,8 @@ th,td { border-bottom:1px solid #ddd; padding:8px; }
 .navbar a.active {
   background:#0078ff; color:white; font-weight:bold;
 }
-
-/* ===== 改修中オーバーレイ ===== */
-#maintenanceOverlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.85);
-  color: #fff;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-#maintenanceOverlay .overlay-content {
-  padding: 30px;
-  border-radius: 12px;
-  background: #222;
-  max-width: 90%;
-}
-#maintenanceOverlay .tap {
-  margin-top: 20px;
-  font-size: 18px;
-  font-weight: bold;
-  color: #4da3ff;
-}
 </style>
 </head>
-
-<div id="maintenanceOverlay">
-  <div class="overlay-content">
-    <h2>現在改修中です</h2>
-    <p>▶ 画面をタップして起動</p>
-  </div>
-</div>
 
 <body>
 
@@ -89,7 +59,7 @@ th,td { border-bottom:1px solid #ddd; padding:8px; }
 <div id="firstCodeDisplay"></div>
 
 <div id="video-container">
-  <video id="video" playsinline></video>
+  <div id="interactive"></div>
   <div id="scan-frame"></div>
 </div>
 
@@ -106,15 +76,18 @@ th,td { border-bottom:1px solid #ddd; padding:8px; }
   <a href="scan.html" class="active">🏷️ 海外ラベル</a>
 </div>
 
+<!-- QuaggaJS -->
+<script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
+
 <script>
 // ================= IndexedDB =================
 let db;
-const req = indexedDB.open("barcodeDB",1);
-req.onupgradeneeded = e=>{
+const req=indexedDB.open("barcodeDB",1);
+req.onupgradeneeded=e=>{
   db=e.target.result;
   db.createObjectStore("records",{keyPath:"id",autoIncrement:true});
 };
-req.onsuccess = e=>{
+req.onsuccess=e=>{
   db=e.target.result;
   loadHistory();
 };
@@ -128,10 +101,6 @@ const errorSound=new Audio("sounds/keikoku.mp3");
 let step=1;
 let firstCode="";
 let scanning=false;
-let stream=null;
-
-const video=document.getElementById("video");
-const frame=document.getElementById("scan-frame");
 
 // ================= 表示 =================
 function setStatus(t,c="normal"){
@@ -139,56 +108,59 @@ function setStatus(t,c="normal"){
   status.className=c;
 }
 
-// ================= カメラ起動 =================
-async function startScan(){
+// ================= スキャン開始 =================
+function startScan(){
   if(scanning) return;
   scanning=true;
 
-  if(!("BarcodeDetector" in window)){
-    alert("このブラウザはBarcodeDetectorに対応していません");
-    scanning=false;
-    return;
-  }
-
-  stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ ideal:"environment" } }
+  Quagga.init({
+    inputStream:{
+      type:"LiveStream",
+      target:document.querySelector("#interactive"),
+      constraints:{
+        facingMode:"environment",
+        width:640,
+        height:480
+      }
+    },
+    locator:{ patchSize:"medium", halfSample:true },
+    decoder:{
+      readers:[
+        "code_128_reader",
+        "ean_reader",
+        "ean_8_reader",
+        "code_39_reader",
+        "itf_reader"
+      ]
+    },
+    locate:true
+  },err=>{
+    if(err){
+      alert("カメラ起動失敗："+err);
+      scanning=false;
+      return;
+    }
+    Quagga.start();
   });
-  video.srcObject=stream;
-  await video.play();
 
-  const detector = new BarcodeDetector({
-    formats:["code_128","code_39","ean_13","ean_8","itf"]
-  });
-
-  scanLoop(detector);
+  Quagga.onDetected(onDetected);
 }
 
-// ================= 読み取りループ =================
-async function scanLoop(detector){
-  if(!scanning) return;
+// ================= 読み取り =================
+function onDetected(result){
+  const code=result.codeResult.code;
+  if(!code) return;
 
-  const barcodes = await detector.detect(video);
-  if(barcodes.length){
-    handleScan(barcodes[0].rawValue);
-    return;
-  }
-  requestAnimationFrame(()=>scanLoop(detector));
-}
-
-// ================= 停止 =================
-function stopCamera(){
+  Quagga.offDetected(onDetected);
+  Quagga.stop();
   scanning=false;
-  if(stream){
-    stream.getTracks().forEach(t=>t.stop());
-  }
-  video.srcObject=null;
+
+  handleScan(code);
 }
 
 // ================= 判定 =================
 function handleScan(code){
-  stopCamera();
   readSound.play();
-
   const v=code.trim();
 
   if(step===1){
@@ -215,7 +187,10 @@ function handleScan(code){
 
 // ================= リセット =================
 function resetAll(){
-  stopCamera();
+  if(scanning){
+    Quagga.stop();
+    scanning=false;
+  }
   step=1;
   firstCode="";
   setStatus("海外パーツラベルの品番を読み取ってください");
@@ -262,11 +237,6 @@ csvBtn.onclick=()=>{
 
 scanBtn.onclick=startScan;
 resetBtn.onclick=resetAll;
-
-// ===== オーバーレイ =====
-maintenanceOverlay.onclick=()=>{
-  maintenanceOverlay.style.display="none";
-};
 </script>
 
 </body>
