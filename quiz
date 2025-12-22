@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>現場教育クイズ</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f2f2f2;
+  padding: 20px;
+  margin-bottom: 80px;
+}
+
+h1 {
+  text-align: center;
+}
+
+#box {
+  background: #fff;
+  border-radius: 14px;
+  padding: 25px;
+  max-width: 600px;
+  margin: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+#question {
+  font-size: 22px;
+  margin-bottom: 25px;
+}
+
+.buttons {
+  display: flex;
+  gap: 20px;
+}
+
+button {
+  flex: 1;
+  font-size: 26px;
+  padding: 20px;
+  border-radius: 14px;
+  border: none;
+  color: white;
+}
+
+#yesBtn { background: #28a745; }
+#noBtn  { background: #dc3545; }
+
+#result {
+  margin-top: 25px;
+  font-size: 22px;
+  font-weight: bold;
+}
+
+#reason {
+  margin-top: 10px;
+  font-size: 18px;
+  color: #333;
+}
+
+#nextBtn {
+  margin-top: 25px;
+  width: 100%;
+  font-size: 20px;
+  padding: 15px;
+  border-radius: 12px;
+  background: #007bff;
+  color: white;
+  border: none;
+  display: none;
+}
+</style>
+</head>
+<body>
+
+<h1>🏭 現場教育クイズ</h1>
+
+<div id="box">
+  <div id="question"></div>
+
+  <div class="buttons">
+    <button id="yesBtn" onclick="answer(true)">〇</button>
+    <button id="noBtn" onclick="answer(false)">×</button>
+  </div>
+
+  <div id="result"></div>
+  <div id="reason"></div>
+
+  <button id="nextBtn" onclick="next()">次へ</button>
+</div>
+
+<script>
+const quizzes = [
+  {
+    q: "バーコードが読み取れない場合、目視確認せずに次工程へ流してよい。",
+    correct: false,
+    reason: "読み取れない場合は必ず目視確認・上長確認を行います。"
+  },
+  {
+    q: "ラベルの向きが逆でも、番号が一致していれば合格である。",
+    correct: false,
+    reason: "向き・位置・内容すべてが検品対象です。"
+  },
+  {
+    q: "異常を発見した場合、作業を止めて報告するのは正しい行動である。",
+    correct: true,
+    reason: "不良流出防止のため、即停止・報告が基本です。"
+  },
+  {
+    q: "慣れてきた作業でも、手順書の確認は必要である。",
+    correct: true,
+    reason: "自己判断はミスの原因になります。"
+  }
+];
+
+let index = 0;
+
+const questionEl = document.getElementById("question");
+const resultEl = document.getElementById("result");
+const reasonEl = document.getElementById("reason");
+const nextBtn = document.getElementById("nextBtn");
+
+function show() {
+  questionEl.textContent = quizzes[index].q;
+  resultEl.textContent = "";
+  reasonEl.textContent = "";
+  nextBtn.style.display = "none";
+}
+
+function answer(choice) {
+  const q = quizzes[index];
+  if (choice === q.correct) {
+    resultEl.textContent = "⭕ 正解";
+    resultEl.style.color = "green";
+  } else {
+    resultEl.textContent = "❌ 不正解";
+    resultEl.style.color = "red";
+  }
+  reasonEl.textContent = "理由： " + q.reason;
+  nextBtn.style.display = "block";
+}
+
+function next() {
+  index++;
+  if (index >= quizzes.length) {
+    questionEl.textContent = "🎉 全問終了です";
+    document.querySelector(".buttons").style.display = "none";
+    nextBtn.style.display = "none";
+    resultEl.textContent = "";
+    reasonEl.textContent = "";
+    return;
+  }
+  show();
+}
+
+show();
+</script>
+
+</body>
+</html>
