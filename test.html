@@ -34,25 +34,25 @@ table { width: 100%; margin-top: 20px; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 
 .navbar {
-    position:fixed;
-    bottom:0; left:0;
-    width:100%;
-    background:#f3f3f3;
-    border-top:2px solid #ccc;
-    display:flex;
+  position:fixed;
+  bottom:0; left:0;
+  width:100%;
+  background:#f3f3f3;
+  border-top:2px solid #ccc;
+  display:flex;
 }
 .navbar a {
-    flex:1;
-    text-align:center;
-    padding:15px 0;
-    font-size:18px;
-    text-decoration:none;
-    color:#333;
+  flex:1;
+  text-align:center;
+  padding:15px 0;
+  font-size:18px;
+  text-decoration:none;
+  color:#333;
 }
 .navbar a.active {
-    background:#0078ff;
-    color:white;
-    font-weight:bold;
+  background:#0078ff;
+  color:white;
+  font-weight:bold;
 }
 
 /* ===== 改修中オーバーレイ ===== */
@@ -67,51 +67,37 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
   justify-content: center;
   text-align: center;
 }
-
 #maintenanceOverlay .overlay-content {
   padding: 30px;
   border-radius: 12px;
   background: #222;
   max-width: 90%;
 }
-
 #maintenanceOverlay h2 {
   font-size: 24px;
   margin-bottom: 15px;
 }
-
 #maintenanceOverlay p {
   font-size: 16px;
   margin-bottom: 10px;
 }
-
 #maintenanceOverlay .tap {
   margin-top: 20px;
   font-size: 18px;
   font-weight: bold;
   color: #4da3ff;
 }
-
-  
 </style>
 </head>
 
-<!-- ===== 改修中オーバーレイ ===== -->
 <div id="maintenanceOverlay">
   <div class="overlay-content">
     <h2>現在改修中です</h2>
-    <p>
-      システム調整のため一時的に<br>
-      表示制限を行っています。
-    </p>
-    <p class="tap">
-      ▶ 画面をタップして起動
-    </p>
+    <p>システム調整のため一時的に<br>表示制限を行っています。</p>
+    <p class="tap">▶ 画面をタップして起動</p>
   </div>
 </div>
 
-
-  
 <body>
 
 <h2>海外ラベル貼り検品</h2>
@@ -120,8 +106,8 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 <div id="firstCodeDisplay"></div>
 
 <div id="video-container">
-    <video id="v" autoplay playsinline></video>
-    <div id="scan-frame"></div>
+  <video id="v" autoplay playsinline></video>
+  <div id="scan-frame"></div>
 </div>
 
 <button id="scanBtn">📷 バーコードを読み取る</button>
@@ -132,12 +118,12 @@ th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 <table id="history"></table>
 
 <div class="navbar">
-    <a href="index.html">📷 QR検品</a>
-    <a href="tenyuryoku.html">⌨ 手入力検品</a>
-    <a href="scan.html" class="active">🏷️ 海外ラベル</a>
+  <a href="index.html">📷 QR検品</a>
+  <a href="tenyuryoku.html">⌨ 手入力検品</a>
+  <a href="scan.html" class="active">🏷️ 海外ラベル</a>
 </div>
 
-<script src="https://unpkg.com/@zxing/library@latest"></script>
+<script src="js/zxing.min.js"></script>
 
 <script>
 // ================= IndexedDB =================
@@ -145,20 +131,18 @@ let db;
 const request = indexedDB.open("barcodeDB", 1);
 
 request.onupgradeneeded = e => {
-    db = e.target.result;
-    db.createObjectStore("records", { keyPath: "id", autoIncrement: true });
+  db = e.target.result;
+  db.createObjectStore("records", { keyPath: "id", autoIncrement: true });
 };
-
 request.onsuccess = e => {
-    db = e.target.result;
-    loadHistory();
+  db = e.target.result;
+  loadHistory();
 };
 
 // ================= 音・振動 =================
 const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
-
 const vibrate = p => navigator.vibrate && navigator.vibrate(p);
 
 // ========== 変数 ==========
@@ -169,230 +153,152 @@ let scanning = false;
 
 const reader = new ZXing.BrowserMultiFormatReader();
 const video = document.getElementById("v");
-const scanFrame = document.getElementById("scan-frame");
 
-// ========== ステータス表示 ==========
+// ========== ステータス ==========
 function setStatus(text, type="normal") {
-    const s = document.getElementById("status");
-    s.textContent = text;
-    s.className = type;
+  const s = document.getElementById("status");
+  s.textContent = text;
+  s.className = type;
 }
 
-// ========== スキャン開始 ==========
+// ========== カメラ開始（★Android/iPhone両対応） ==========
 async function startScan() {
-    if (scanning) return;
-    scanning = true;
+  if (scanning) return;
+  scanning = true;
 
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: "environment",
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            }
-        });
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } }
+    });
 
-        video.srcObject = stream;
-        scanLoop();
-    } catch (e) {
-        alert("カメラが使用できません：" + e.message);
-        scanning = false;
-    }
-}
+    video.srcObject = stream;
 
-// ========== スキャンループ ==========
-async function scanLoop() {
-    if (!scanning) return;
+    reader.decodeFromVideoElement(video, (result, err) => {
+      if (result) {
+        handleScan(result.text);
+      }
+    });
 
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-
-    const frameRect = scanFrame.getBoundingClientRect();
-    const videoRect = video.getBoundingClientRect();
-
-    canvas.width = frameRect.width;
-    canvas.height = frameRect.height;
-
-    const scaleX = video.videoWidth / videoRect.width;
-    const scaleY = video.videoHeight / videoRect.height;
-
-    ctx.drawImage(
-        video,
-        (frameRect.left - videoRect.left) * scaleX,
-        (frameRect.top  - videoRect.top ) * scaleY,
-        frameRect.width  * scaleX,
-        frameRect.height * scaleY,
-        0, 0, canvas.width, canvas.height
-    );
-
-    try {
-        const result = await reader.decodeFromImageUrl(canvas.toDataURL());
-        if (result && result.text) {
-            handleScan(result.text);
-            return;
-        }
-    } catch (e) { }
-
-    requestAnimationFrame(scanLoop);
+  } catch (e) {
+    alert("カメラが使用できません：" + e.message);
+    scanning = false;
+  }
 }
 
 // ========== カメラ停止 ==========
 function stopCamera() {
-    scanning = false;
-    if (video.srcObject) {
-        video.srcObject.getTracks().forEach(t => t.stop());
-    }
-    video.srcObject = null;
+  scanning = false;
+  reader.reset();
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+  }
+  video.srcObject = null;
 }
 
 // ========== スキャン後処理 ==========
 function handleScan(code) {
-    stopCamera();
+  stopCamera();
 
-    const scanned = code.trim();
+  const scanned = code.trim();
+  readSound.currentTime = 0;
+  readSound.play();
+  vibrate(150);
 
-    // 読み取り音
-    readSound.currentTime = 0;
-    readSound.play();
-    vibrate(150);
-
-    // ======== 1回目（7文字以下）========
-    if (step === 1) {
-        if (scanned.length > 7) {
-            errorSound.play();
-            vibrate([200,100,200]);
-            setStatus("❌ 1回目は7文字以下で読み取ってください", "ng");
-            return;
-        }
-
-        firstCode = scanned;
-
-        document.getElementById("firstCodeDisplay").textContent =
-            "1回目のコード : " + firstCode;
-
-        setStatus("海外パーツラベルの品番を読み取ってください", "normal");
-        step = 2;
-        return;
+  if (step === 1) {
+    if (scanned.length > 7) {
+      errorSound.play();
+      setStatus("❌ 1回目は7文字以下で読み取ってください", "ng");
+      return;
     }
-
-    // ======== 2回目（8文字以上）========
-    if (step === 2) {
-        if (scanned.length < 8) {
-            errorSound.play();
-            vibrate([200,100,200]);
-            setStatus("❌ 2回目は貼り付けるパーツラベルを読み取ってください", "ng");
-            return;
-        }
-
-        secondCode = scanned;
-
-        // ★ 含まれているかどうかの判定
-        const ok = secondCode.includes(firstCode);
-
-        if (ok) {
-            successSound.play();
-            vibrate([200, 100, 200]);
-            setStatus("✔ 一致しました！", "ok");
-        } else {
-            errorSound.play();
-            vibrate([300, 120, 300]);
-            setStatus("❌ 不一致です", "ng");
-        }
-
-        addHistory(firstCode, secondCode, ok ? "OK" : "NG");
-
-        // スキャンボタンを隠す
-        document.getElementById("scanBtn").style.display = "none";
-
-        step = 3;
-        return;
-    }
-}
-
-// ========== 最初に戻る ==========
-function resetAll() {
-    step = 1;
-    firstCode = "";
-    secondCode = "";
-
-    setStatus("海外パーツラベルの品番を読み取ってください", "normal");
-    document.getElementById("firstCodeDisplay").textContent = "";
-    document.getElementById("scanBtn").style.display = "block";
-}
-
-// ================= IndexedDB保存 =================
-function saveHistory(first, second, result) {
-    const tx = db.transaction("records","readwrite");
-    tx.objectStore("records").add({
-        time: new Date().toLocaleString(),
-        first, second, result
-    });
-    tx.oncomplete = loadHistory;
-}
-
-// ================= 履歴表示 =================
-function loadHistory() {
-    const tx = db.transaction("records","readonly");
-    const req = tx.objectStore("records").getAll();
-
-    req.onsuccess = () => {
-        const table = document.getElementById("history");
-        table.innerHTML = "<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>";
-
-        req.result.slice(-5).reverse().forEach(r=>{
-            table.innerHTML += `
-            <tr>
-              <td>${r.time}</td>
-              <td>${r.first}</td>
-              <td>${r.second}</td>
-              <td>${r.result}</td>
-            </tr>`;
-        });
-    };
-}
-
-// ================= CSV出力 =================
-function downloadCSV() {
-    const tx = db.transaction("records","readonly");
-    const req = tx.objectStore("records").getAll();
-
-    req.onsuccess = () => {
-        let csv = "時刻,1回目,2回目,結果\n";
-        req.result.forEach(r=>{
-            csv += `${r.time},${r.first},${r.second},${r.result}\n`;
-        });
-
-        const blob = new Blob([csv],{type:"text/csv"});
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "barcode_history.csv";
-        a.click();
-    };
-}
-
-// ================= リセット =================
-function resetAll() {
-    step = 1;
-    firstCode = "";
+    firstCode = scanned;
+    document.getElementById("firstCodeDisplay").textContent = "1回目のコード : " + firstCode;
     setStatus("海外パーツラベルの品番を読み取ってください");
-    document.getElementById("firstCodeDisplay").textContent="";
-    document.getElementById("scanBtn").style.display="block";
+    step = 2;
+    return;
+  }
+
+  if (step === 2) {
+    if (scanned.length < 8) {
+      errorSound.play();
+      setStatus("❌ 2回目は貼り付けるパーツラベルを読み取ってください", "ng");
+      return;
+    }
+    secondCode = scanned;
+    const ok = secondCode.includes(firstCode);
+
+    if (ok) {
+      successSound.play();
+      setStatus("✔ 一致しました！", "ok");
+    } else {
+      errorSound.play();
+      setStatus("❌ 不一致です", "ng");
+    }
+
+    saveHistory(firstCode, secondCode, ok ? "OK" : "NG");
+    document.getElementById("scanBtn").style.display = "none";
+    step = 3;
+  }
+}
+
+// ========== リセット ==========
+function resetAll() {
+  stopCamera();
+  step = 1;
+  firstCode = "";
+  setStatus("海外パーツラベルの品番を読み取ってください");
+  document.getElementById("firstCodeDisplay").textContent = "";
+  document.getElementById("scanBtn").style.display = "block";
+}
+
+// ================= IndexedDB =================
+function saveHistory(first, second, result) {
+  const tx = db.transaction("records","readwrite");
+  tx.objectStore("records").add({
+    time: new Date().toLocaleString(),
+    first, second, result
+  });
+  tx.oncomplete = loadHistory;
+}
+
+function loadHistory() {
+  const tx = db.transaction("records","readonly");
+  const req = tx.objectStore("records").getAll();
+  req.onsuccess = () => {
+    const table = document.getElementById("history");
+    table.innerHTML = "<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>";
+    req.result.slice(-5).reverse().forEach(r=>{
+      table.innerHTML += `<tr>
+        <td>${r.time}</td><td>${r.first}</td><td>${r.second}</td><td>${r.result}</td>
+      </tr>`;
+    });
+  };
+}
+
+// ================= CSV =================
+function downloadCSV() {
+  const tx = db.transaction("records","readonly");
+  const req = tx.objectStore("records").getAll();
+  req.onsuccess = () => {
+    let csv = "時刻,1回目,2回目,結果\n";
+    req.result.forEach(r=>{
+      csv += `${r.time},${r.first},${r.second},${r.result}\n`;
+    });
+    const blob = new Blob([csv],{type:"text/csv"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "barcode_history.csv";
+    a.click();
+  };
 }
 
 // ================= イベント =================
 scanBtn.onclick = startScan;
 resetBtn.onclick = resetAll;
 csvBtn.onclick = downloadCSV;
-</script>
 
-  <script>
-document.getElementById("maintenanceOverlay").addEventListener("click", () => {
-  // オーバーレイを消す
+document.getElementById("maintenanceOverlay").onclick = () => {
   document.getElementById("maintenanceOverlay").style.display = "none";
-
-  // 必要ならここで初期処理を開始
-  // 例：入力欄を有効にする、カメラ準備など
-});
+};
 </script>
 
 </body>
