@@ -6,57 +6,53 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-body {
-  font-family: -apple-system, BlinkMacSystemFont;
-  padding:20px;
-  margin-bottom:90px;
-}
-#status {
-  padding:20px;
-  font-size:22px;
-  font-weight:bold;
-  border-radius:12px;
-  text-align:center;
-}
-.ok { background:#2ecc71; color:#fff; }
-.ng { background:#e74c3c; color:#fff; }
-.normal { background:#eee; color:#0066cc; }
+body { font-family: -apple-system, BlinkMacSystemFont; padding: 20px; margin-bottom:80px; }
+#status { padding: 20px; font-size: 24px; font-weight: bold; border-radius: 12px; text-align: center; margin-bottom: 10px; }
+.ok { background: green; color: white; }
+.ng { background: red; color: white; }
+.normal { background: #e5e5e5; color: #0066cc; }
 
-video {
-  width:100%;
-  max-width:400px;
-  border-radius:10px;
-  margin:auto;
-  display:block;
+#firstCodeDisplay { font-size: 20px; margin-bottom: 20px; font-weight: bold; }
+
+#video-container { position: relative; width: 100%; max-width: 400px; margin: auto; }
+video { width: 100%; border-radius: 10px; }
+
+#scan-frame {
+  width: 260px;
+  height: 160px;
+  border: 3px solid rgba(255,0,0,0.8);
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: 10px;
 }
 
-button {
-  width:100%;
-  padding:15px;
-  font-size:18px;
-  margin-top:15px;
-  border-radius:10px;
-}
+button { width: 100%; font-size: 20px; padding: 15px; margin-top: 20px; border-radius: 10px; }
+
+table { width: 100%; margin-top: 20px; border-collapse: collapse; }
+th, td { border-bottom: 1px solid #ddd; padding: 8px; }
 
 .navbar {
-  position:fixed;
-  bottom:0; left:0;
-  width:100%;
-  display:flex;
-  background:#f3f3f3;
-  border-top:2px solid #ccc;
+    position:fixed;
+    bottom:0; left:0;
+    width:100%;
+    background:#f3f3f3;
+    border-top:2px solid #ccc;
+    display:flex;
 }
 .navbar a {
-  flex:1;
-  text-align:center;
-  padding:15px 0;
-  text-decoration:none;
-  color:#333;
+    flex:1;
+    text-align:center;
+    padding:15px 0;
+    font-size:18px;
+    text-decoration:none;
+    color:#333;
 }
 .navbar a.active {
-  background:#0078ff;
-  color:white;
-  font-weight:bold;
+    background:#0078ff;
+    color:white;
+    font-weight:bold;
 }
 
 /* ===== 改修中オーバーレイ ===== */
@@ -96,6 +92,7 @@ button {
   color: #4da3ff;
 }
 
+  
 </style>
 </head>
 
@@ -112,109 +109,283 @@ button {
     </p>
   </div>
 </div>
+
+
   
 <body>
 
 <h2>海外ラベル貼り検品</h2>
 
-<div id="status" class="normal">
-海外パーツラベルの品番を読み取ってください
+<div id="status" class="normal">海外パーツラベルの品番を読み取ってください</div>
+<div id="firstCodeDisplay"></div>
+
+<div id="video-container">
+    <video id="v" autoplay playsinline></video>
+    <div id="scan-frame"></div>
 </div>
 
-<video id="video" playsinline></video>
-
-<button id="scanBtn">📷 読み取り開始</button>
+<button id="scanBtn">📷 バーコードを読み取る</button>
 <button id="resetBtn">🔄 最初に戻る</button>
+<button id="csvBtn">📄 CSV出力</button>
+
+<h3>履歴（最新5件）</h3>
+<table id="history"></table>
 
 <div class="navbar">
-  <a href="index.html">📷 QR検品</a>
-  <a href="tenyuryoku.html">⌨ 手入力</a>
-  <a href="scan.html" class="active">🏷️ 海外ラベル</a>
+    <a href="index.html">📷 QR検品</a>
+    <a href="tenyuryoku.html">⌨ 手入力検品</a>
+    <a href="scan.html" class="active">🏷️ 海外ラベル</a>
 </div>
 
-<!-- ★ 完全オフライン ZXing -->
-<script src="js/zxing.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@latest"></script>
 
 <script>
-const video = document.getElementById("video");
-const scanBtn = document.getElementById("scanBtn");
-const resetBtn = document.getElementById("resetBtn");
+// ================= IndexedDB =================
+let db;
+const request = indexedDB.open("barcodeDB", 1);
 
+request.onupgradeneeded = e => {
+    db = e.target.result;
+    db.createObjectStore("records", { keyPath: "id", autoIncrement: true });
+};
+
+request.onsuccess = e => {
+    db = e.target.result;
+    loadHistory();
+};
+
+// ================= 音・振動 =================
+const readSound = new Audio("sounds/yomitori.mp3");
+const successSound = new Audio("sounds/seikou.mp3");
+const errorSound = new Audio("sounds/keikoku.mp3");
+
+const vibrate = p => navigator.vibrate && navigator.vibrate(p);
+
+// ========== 変数 ==========
 let step = 1;
 let firstCode = "";
-let controls = null;
+let secondCode = "";
+let scanning = false;
 
 const reader = new ZXing.BrowserMultiFormatReader();
+const video = document.getElementById("v");
+const scanFrame = document.getElementById("scan-frame");
 
+// ========== ステータス表示 ==========
 function setStatus(text, type="normal") {
-  const s = document.getElementById("status");
-  s.textContent = text;
-  s.className = type;
+    const s = document.getElementById("status");
+    s.textContent = text;
+    s.className = type;
 }
 
+// ========== スキャン開始 ==========
 async function startScan() {
-  try {
-    controls = await reader.decodeFromVideoDevice(
-      null,
-      video,
-      (result, err) => {
-        if (result) {
-          handleScan(result.text);
-        }
-      }
-    );
-  } catch (e) {
-    alert("カメラ起動失敗: " + e.message);
-  }
-}
+    if (scanning) return;
+    scanning = true;
 
-function stopScan() {
-  if (controls) {
-    controls.stop();
-    controls = null;
-  }
-}
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: "environment",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        });
 
-function handleScan(code) {
-  stopScan();
-  const value = code.trim();
-
-  if (step === 1) {
-    if (value.length > 7) {
-      setStatus("❌ 7文字以下を読み取ってください", "ng");
-      return;
+        video.srcObject = stream;
+        scanLoop();
+    } catch (e) {
+        alert("カメラが使用できません：" + e.message);
+        scanning = false;
     }
-    firstCode = value;
-    step = 2;
-    setStatus("次に貼付ラベルを読み取ってください", "normal");
-    return;
-  }
-
-  if (step === 2) {
-    const ok = value.includes(firstCode);
-    setStatus(ok ? "✔ 一致しました" : "❌ 不一致です", ok ? "ok" : "ng");
-    step = 3;
-  }
 }
 
+// ========== スキャンループ ==========
+async function scanLoop() {
+    if (!scanning) return;
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const frameRect = scanFrame.getBoundingClientRect();
+    const videoRect = video.getBoundingClientRect();
+
+    canvas.width = frameRect.width;
+    canvas.height = frameRect.height;
+
+    const scaleX = video.videoWidth / videoRect.width;
+    const scaleY = video.videoHeight / videoRect.height;
+
+    ctx.drawImage(
+        video,
+        (frameRect.left - videoRect.left) * scaleX,
+        (frameRect.top  - videoRect.top ) * scaleY,
+        frameRect.width  * scaleX,
+        frameRect.height * scaleY,
+        0, 0, canvas.width, canvas.height
+    );
+
+    try {
+        const result = await reader.decodeFromImageUrl(canvas.toDataURL());
+        if (result && result.text) {
+            handleScan(result.text);
+            return;
+        }
+    } catch (e) { }
+
+    requestAnimationFrame(scanLoop);
+}
+
+// ========== カメラ停止 ==========
+function stopCamera() {
+    scanning = false;
+    if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+    }
+    video.srcObject = null;
+}
+
+// ========== スキャン後処理 ==========
+function handleScan(code) {
+    stopCamera();
+
+    const scanned = code.trim();
+
+    // 読み取り音
+    readSound.currentTime = 0;
+    readSound.play();
+    vibrate(150);
+
+    // ======== 1回目（7文字以下）========
+    if (step === 1) {
+        if (scanned.length > 7) {
+            errorSound.play();
+            vibrate([200,100,200]);
+            setStatus("❌ 1回目は7文字以下で読み取ってください", "ng");
+            return;
+        }
+
+        firstCode = scanned;
+
+        document.getElementById("firstCodeDisplay").textContent =
+            "1回目のコード : " + firstCode;
+
+        setStatus("海外パーツラベルの品番を読み取ってください", "normal");
+        step = 2;
+        return;
+    }
+
+    // ======== 2回目（8文字以上）========
+    if (step === 2) {
+        if (scanned.length < 8) {
+            errorSound.play();
+            vibrate([200,100,200]);
+            setStatus("❌ 2回目は貼り付けるパーツラベルを読み取ってください", "ng");
+            return;
+        }
+
+        secondCode = scanned;
+
+        // ★ 含まれているかどうかの判定
+        const ok = secondCode.includes(firstCode);
+
+        if (ok) {
+            successSound.play();
+            vibrate([200, 100, 200]);
+            setStatus("✔ 一致しました！", "ok");
+        } else {
+            errorSound.play();
+            vibrate([300, 120, 300]);
+            setStatus("❌ 不一致です", "ng");
+        }
+
+        addHistory(firstCode, secondCode, ok ? "OK" : "NG");
+
+        // スキャンボタンを隠す
+        document.getElementById("scanBtn").style.display = "none";
+
+        step = 3;
+        return;
+    }
+}
+
+// ========== 最初に戻る ==========
 function resetAll() {
-  stopScan();
-  step = 1;
-  firstCode = "";
-  setStatus("海外パーツラベルの品番を読み取ってください", "normal");
+    step = 1;
+    firstCode = "";
+    secondCode = "";
+
+    setStatus("海外パーツラベルの品番を読み取ってください", "normal");
+    document.getElementById("firstCodeDisplay").textContent = "";
+    document.getElementById("scanBtn").style.display = "block";
 }
 
+// ================= IndexedDB保存 =================
+function saveHistory(first, second, result) {
+    const tx = db.transaction("records","readwrite");
+    tx.objectStore("records").add({
+        time: new Date().toLocaleString(),
+        first, second, result
+    });
+    tx.oncomplete = loadHistory;
+}
+
+// ================= 履歴表示 =================
+function loadHistory() {
+    const tx = db.transaction("records","readonly");
+    const req = tx.objectStore("records").getAll();
+
+    req.onsuccess = () => {
+        const table = document.getElementById("history");
+        table.innerHTML = "<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>";
+
+        req.result.slice(-5).reverse().forEach(r=>{
+            table.innerHTML += `
+            <tr>
+              <td>${r.time}</td>
+              <td>${r.first}</td>
+              <td>${r.second}</td>
+              <td>${r.result}</td>
+            </tr>`;
+        });
+    };
+}
+
+// ================= CSV出力 =================
+function downloadCSV() {
+    const tx = db.transaction("records","readonly");
+    const req = tx.objectStore("records").getAll();
+
+    req.onsuccess = () => {
+        let csv = "時刻,1回目,2回目,結果\n";
+        req.result.forEach(r=>{
+            csv += `${r.time},${r.first},${r.second},${r.result}\n`;
+        });
+
+        const blob = new Blob([csv],{type:"text/csv"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "barcode_history.csv";
+        a.click();
+    };
+}
+
+// ================= リセット =================
+function resetAll() {
+    step = 1;
+    firstCode = "";
+    setStatus("海外パーツラベルの品番を読み取ってください");
+    document.getElementById("firstCodeDisplay").textContent="";
+    document.getElementById("scanBtn").style.display="block";
+}
+
+// ================= イベント =================
 scanBtn.onclick = startScan;
 resetBtn.onclick = resetAll;
+csvBtn.onclick = downloadCSV;
 </script>
 
-<script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js");
-}
-</script>
-
-<script>
+  <script>
 document.getElementById("maintenanceOverlay").addEventListener("click", () => {
   // オーバーレイを消す
   document.getElementById("maintenanceOverlay").style.display = "none";
@@ -224,7 +395,6 @@ document.getElementById("maintenanceOverlay").addEventListener("click", () => {
 });
 </script>
 
-  
 </body>
 </html>
 
