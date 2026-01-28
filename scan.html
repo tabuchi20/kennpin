@@ -159,6 +159,16 @@ const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
+  /* ★ Android対策：音アンロック */
+function unlockAudio() {
+    [readSound, successSound, errorSound].forEach(sound => {
+        sound.play().then(() => {
+            sound.pause();
+            sound.currentTime = 0;
+        }).catch(()=>{});
+    });
+}
+
 const vibrate = p => navigator.vibrate && navigator.vibrate(p);
 
 // ========== 変数 ==========
@@ -380,7 +390,10 @@ function resetAll() {
 }
 
 // ================= イベント =================
-scanBtn.onclick = startScan;
+scanBtn.onclick = () => {
+    unlockAudio();   // ★ ここがAndroid対策の肝
+    scan();
+};
 resetBtn.onclick = resetAll;
 csvBtn.onclick = downloadCSV;
 </script>
@@ -397,5 +410,6 @@ document.getElementById("maintenanceOverlay").addEventListener("click", () => {
 
 </body>
 </html>
+
 
 
