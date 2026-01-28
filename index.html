@@ -99,6 +99,17 @@ const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
+
+  /* ★ Android対策：音アンロック */
+function unlockAudio() {
+    [readSound, successSound, errorSound].forEach(sound => {
+        sound.play().then(() => {
+            sound.pause();
+            sound.currentTime = 0;
+        }).catch(()=>{});
+    });
+}
+
 // IndexedDB
 let db;
 const req = indexedDB.open("checksDB", 1);
@@ -286,7 +297,10 @@ function exportCSV() {
 }
 
 // ===== イベント =====
-scanBtn.onclick = scan;
+scanBtn.onclick = () => {
+    unlockAudio();   // ★ ここがAndroid対策の肝
+    scan();
+};
 resetBtn.onclick = resetAll;
 exportBtn.onclick = exportCSV;
 </script>
@@ -299,6 +313,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
