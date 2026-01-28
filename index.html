@@ -35,6 +35,7 @@ video { width: 100%; border-radius: 10px; }
   border-radius: 10px;
 }
 
+  /* ▼ 固定フッターナビ ▼ */
 .navbar {
     position:fixed;
     bottom:0;
@@ -77,10 +78,11 @@ video { width: 100%; border-radius: 10px; }
 <h3>履歴</h3>
 <table id="history"></table>
 
+  <!-- ▼ ページ切替ナビ ▼ -->
 <div class="navbar">
     <a href="index.html" class="active">📷 QR検品</a>
     <a href="tenyuryoku.html">⌨ 手入力検品</a>
-    <a href="scan.html">🏷️ 海外ラベル</a>
+　  <a href="scan.html">🏷️ 海外ラベル</a>
 </div>
 
 <script src="js/jsQR.js"></script>
@@ -92,27 +94,12 @@ let firstCode2 = "";
 let scanning = false;
 let detected = false;
 
-/* ===== 音 ===== */
-const readSound    = new Audio("sounds/yomitori.mp3");
+// 音
+const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
-const errorSound   = new Audio("sounds/keikoku.mp3");
+const errorSound = new Audio("sounds/keikoku.mp3");
 
-let audioUnlocked = false;
-
-/* ★ Android対策：音は一度だけアンロック */
-function unlockAudioOnce() {
-    if (audioUnlocked) return;
-    audioUnlocked = true;
-
-    [readSound, successSound, errorSound].forEach(sound => {
-        sound.play().then(() => {
-            sound.pause();
-            sound.currentTime = 0;
-        }).catch(()=>{});
-    });
-}
-
-/* ===== IndexedDB ===== */
+// IndexedDB
 let db;
 const req = indexedDB.open("checksDB", 1);
 req.onupgradeneeded = e => {
@@ -124,6 +111,7 @@ req.onsuccess = e => {
     loadHistory();
 };
 
+// UI
 function setStatus(text, type="normal") {
     const s = document.getElementById("status");
     s.textContent = text;
@@ -132,7 +120,7 @@ function setStatus(text, type="normal") {
 
 const video = document.getElementById("v");
 
-/* ===== カメラ起動 ===== */
+// ===== カメラ起動=====
 async function scan() {
     if (scanning) return;
     scanning = true;
@@ -142,7 +130,8 @@ async function scan() {
         video: {
             facingMode: { ideal: "environment" },
             width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            height: { ideal: 1080 },
+            advanced: [{ zoom: 2 }]
         }
     });
 
@@ -150,7 +139,7 @@ async function scan() {
     requestAnimationFrame(scanLoop);
 }
 
-/* ===== スキャン処理 ===== */
+// ===== スキャン処理=====
 function scanLoop() {
     if (!scanning || detected) return;
 
@@ -193,14 +182,13 @@ function stopCamera() {
     video.srcObject = null;
 }
 
-/* ===== 判定 ===== */
+// ===== 判定ロジック =====
 function handleScan(code) {
     readSound.play();
 
     if (step === 1) {
         if (code.length < 29) {
             setStatus("バーコードが短すぎます（29文字未満）", "ng");
-            errorSound.play();
             return;
         }
 
@@ -215,7 +203,6 @@ function handleScan(code) {
     if (step === 2) {
         if (code.length < 34) {
             setStatus("バーコードが短すぎます（34文字未満）", "ng");
-            errorSound.play();
             return;
         }
 
@@ -242,7 +229,7 @@ function handleScan(code) {
     }
 }
 
-/* ===== DB ===== */
+// ===== DB =====
 function saveResult(first, second, result) {
     const tx = db.transaction("checks","readwrite");
     tx.objectStore("checks").add({
@@ -271,7 +258,7 @@ function loadHistory() {
     };
 }
 
-/* ===== リセット ===== */
+// ===== リセット =====
 function resetAll() {
     step = 1;
     firstCode1 = "";
@@ -279,7 +266,7 @@ function resetAll() {
     setStatus("現品票のQRを読み込んでください", "normal");
 }
 
-/* ===== CSV ===== */
+// ===== CSV =====
 function exportCSV() {
     const tx = db.transaction("checks","readonly");
     const req = tx.objectStore("checks").getAll();
@@ -298,16 +285,13 @@ function exportCSV() {
     };
 }
 
-/* ===== イベント ===== */
-scanBtn.onclick = () => {
-    unlockAudioOnce();   // ★ 初回だけ音を解放
-    scan();              // ★ カメラは常に安定
-};
+// ===== イベント =====
+scanBtn.onclick = scan;
 resetBtn.onclick = resetAll;
 exportBtn.onclick = exportCSV;
 </script>
 
-<script>
+  <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");
 }
@@ -315,3 +299,6 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
+
+
