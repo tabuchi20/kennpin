@@ -100,7 +100,7 @@ const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
 // 事前ロード
-[readsound, successSound, errorSound].forEach(a => {
+[readSound, successSound, errorSound].forEach(a => {
   a.preload = "auto";
   a.load();
   //失敗ログ
@@ -109,7 +109,7 @@ const errorSound = new Audio("sounds/keikoku.mp3");
   });
 });
 
-function playsafe(audio) {
+function playSafe(audio) {
   //再生位置のリセット
   try {
       audio.currentTime = 0;
@@ -314,7 +314,7 @@ scanBtn.onclick =  () => {
   //最初の一回だけユーザー操作
   if(!audioInitialized) {
       audioInitialized = true;
-      playsafe(readsound);
+      playSafe(readSound);
   }
   scan();
 };
@@ -330,6 +330,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
