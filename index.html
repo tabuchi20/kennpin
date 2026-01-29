@@ -99,6 +99,28 @@ const readSound = new Audio("sounds/yomitori.mp3");
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
 
+// 事前ロード
+[readsound, successSound, errorSound].forEach(a => {
+  a.preload = "auto";
+  a.load();
+  //失敗ログ
+  a.addEventListener("error", e => {
+    console.error("audio error:", a.src, e);
+  });
+});
+
+function playsafe(audio) {
+  //再生位置のリセット
+  try {
+      audio.currentTime = 0;
+  } catch(e) {
+      console.warn("cannot reset currentTime:", audio.src, e);
+  }
+  audio.play().catch(e => {
+      console.warn("audio play failed:", audio.src, e);
+  });
+}
+  
 // IndexedDB
 let db;
 const req = indexedDB.open("checksDB", 1);
@@ -184,7 +206,7 @@ function stopCamera() {
 
 // ===== 判定ロジック =====
 function handleScan(code) {
-    readSound.play();
+    playSafe(readSound);
 
     if (step === 1) {
         if (code.length < 29) {
@@ -286,7 +308,16 @@ function exportCSV() {
 }
 
 // ===== イベント =====
-scanBtn.onclick = scan;
+let audioInitialized = false;
+  
+scanBtn.onclick =  () => {
+  //最初の一回だけユーザー操作
+  if(!audioInitialized) {
+      audioInitialized = true;
+      playsafe(readsound);
+  }
+  scan();
+};
 resetBtn.onclick = resetAll;
 exportBtn.onclick = exportCSV;
 </script>
@@ -299,6 +330,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
