@@ -121,8 +121,8 @@ let scanning = false;
 let detected = false;
 
 // ========= 音声 =========
-const beepOk = new Audio("sounds/seikou.mp3");
-const beepNg = new Audio("sounds/keikoku.mp3");
+const successSound = new Audio("sounds/seikou.mp3");
+const errorSound = new Audio("sounds/keikoku.mp3");
 
 // ========= IndexedDB =========
 let db;
@@ -231,11 +231,11 @@ function scanLoop() {
 function compare(scanned) {
   if (scanned.includes(firstInput)) {
     setStatus("✔ 一致しました！", "ok");
-    beepOk.play();
+    successSound.play();
     saveResult(firstInput, scanned, "OK");
   } else {
     setStatus("❌ 不一致です" , "ng");
-    beepNg.play();
+    errorSound.play();
     saveResult(firstInput, scanned, "NG");
   }
 }
@@ -344,5 +344,6 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
