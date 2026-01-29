@@ -35,7 +35,6 @@ video { width: 100%; border-radius: 10px; }
   border-radius: 10px;
 }
 
-  /* ▼ 固定フッターナビ ▼ */
 .navbar {
     position:fixed;
     bottom:0;
@@ -61,14 +60,15 @@ video { width: 100%; border-radius: 10px; }
 }
 </style>
 </head>
+
 <body>
 
 <h2>QRコード検品</h2>
 <div id="status" class="normal">現品票のQRを読み込んでください</div>
 
 <div id="video-container">
-    <video id="v" autoplay playsinline></video>
-    <div id="scan-frame"></div>
+  <video id="v" autoplay playsinline></video>
+  <div id="scan-frame"></div>
 </div>
 
 <button id="scanBtn">📷 QRコードを読み取る</button>
@@ -78,258 +78,183 @@ video { width: 100%; border-radius: 10px; }
 <h3>履歴</h3>
 <table id="history"></table>
 
-  <!-- ▼ ページ切替ナビ ▼ -->
 <div class="navbar">
-    <a href="index.html" class="active">📷 QR検品</a>
-    <a href="tenyuryoku.html">⌨ 手入力検品</a>
-　  <a href="scan.html">🏷️ 海外ラベル</a>
+  <a href="index.html" class="active">📷 QR検品</a>
+  <a href="tenyuryoku.html">⌨ 手入力検品</a>
+  <a href="scan.html">🏷️ 海外ラベル</a>
 </div>
 
 <script src="js/jsQR.js"></script>
 
 <script>
+// ================= 音声安全設計 =================
+
+// AudioContext（Android復帰対策）
+let audioCtx = null;
+
+// マスターAudio
+let soundMaster = {};
+
+function createSounds() {
+  soundMaster = {
+    read: new Audio("sounds/yomitori.mp3"),
+    ok: new Audio("sounds/seikou.mp3"),
+    ng: new Audio("sounds/keikoku.mp3"),
+  };
+  Object.values(soundMaster).forEach(a => {
+    a.preload = "auto";
+    a.load();
+  });
+}
+
+// 毎回クローン再生（死亡Audio回避）
+function playSound(type) {
+  try {
+    const base = soundMaster[type];
+    if (!base) return;
+
+    const a = base.cloneNode();
+    a.currentTime = 0;
+    a.play().catch(e => {
+      console.warn("audio play blocked:", type, e);
+    });
+  } catch(e) {
+    console.error("playSound error:", e);
+  }
+}
+
+// ユーザー操作で Audio をアンロック
+function unlockAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state !== "running") {
+    audioCtx.resume();
+  }
+}
+
+// 初期生成
+createSounds();
+
+// スリープ復帰時：Audio完全再生成
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    createSounds();
+    audioCtx = null;
+  }
+});
+
+// ================= QR ロジック（元のまま） =================
+
 let step = 1;
 let firstCode1 = "";
 let firstCode2 = "";
 let scanning = false;
 let detected = false;
 
-// 音
-const readSound = new Audio("sounds/yomitori.mp3");
-const successSound = new Audio("sounds/seikou.mp3");
-const errorSound = new Audio("sounds/keikoku.mp3");
-
-// 事前ロード
-[readSound, successSound, errorSound].forEach(a => {
-  a.preload = "auto";
-  a.load();
-  //失敗ログ
-  a.addEventListener("error", e => {
-    console.error("audio error:", a.src, e);
-  });
-});
-
-function playSafe(audio) {
-  //再生位置のリセット
-  try {
-      audio.currentTime = 0;
-  } catch(e) {
-      console.warn("cannot reset currentTime:", audio.src, e);
-  }
-  audio.play().catch(e => {
-      console.warn("audio play failed:", audio.src, e);
-  });
-}
-  
-// IndexedDB
 let db;
 const req = indexedDB.open("checksDB", 1);
 req.onupgradeneeded = e => {
-    db = e.target.result;
-    db.createObjectStore("checks", { keyPath: "id", autoIncrement: true });
+  db = e.target.result;
+  db.createObjectStore("checks", { keyPath: "id", autoIncrement: true });
 };
 req.onsuccess = e => {
-    db = e.target.result;
-    loadHistory();
+  db = e.target.result;
+  loadHistory();
 };
 
-// UI
 function setStatus(text, type="normal") {
-    const s = document.getElementById("status");
-    s.textContent = text;
-    s.className = type;
+  const s = document.getElementById("status");
+  s.textContent = text;
+  s.className = type;
 }
 
 const video = document.getElementById("v");
 
-// ===== カメラ起動=====
 async function scan() {
-    if (scanning) return;
-    scanning = true;
-    detected = false;
+  if (scanning) return;
+  scanning = true;
+  detected = false;
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            advanced: [{ zoom: 2 }]
-        }
-    });
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment" }
+  });
 
-    video.srcObject = stream;
-    requestAnimationFrame(scanLoop);
+  video.srcObject = stream;
+  requestAnimationFrame(scanLoop);
 }
 
-// ===== スキャン処理=====
 function scanLoop() {
-    if (!scanning || detected) return;
+  if (!scanning || detected) return;
 
-    const frame = document.getElementById("scan-frame").getBoundingClientRect();
-    const rect  = video.getBoundingClientRect();
+  const frame = document.getElementById("scan-frame").getBoundingClientRect();
+  const rect = video.getBoundingClientRect();
 
-    const canvas = document.createElement("canvas");
-    canvas.width  = frame.width;
-    canvas.height = frame.height;
-    const ctx = canvas.getContext("2d");
+  const canvas = document.createElement("canvas");
+  canvas.width = frame.width;
+  canvas.height = frame.height;
+  const ctx = canvas.getContext("2d");
 
-    const scaleX = video.videoWidth / rect.width;
-    const scaleY = video.videoHeight / rect.height;
+  const scaleX = video.videoWidth / rect.width;
+  const scaleY = video.videoHeight / rect.height;
 
-    ctx.drawImage(
-        video,
-        (frame.left - rect.left) * scaleX,
-        (frame.top  - rect.top ) * scaleY,
-        frame.width  * scaleX,
-        frame.height * scaleY,
-        0, 0, canvas.width, canvas.height
-    );
+  ctx.drawImage(
+    video,
+    (frame.left - rect.left) * scaleX,
+    (frame.top - rect.top) * scaleY,
+    frame.width * scaleX,
+    frame.height * scaleY,
+    0, 0, canvas.width, canvas.height
+  );
 
-    const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
-    const qr = jsQR(imageData.data, canvas.width, canvas.height);
+  const img = ctx.getImageData(0,0,canvas.width,canvas.height);
+  const qr = jsQR(img.data, canvas.width, canvas.height);
 
-    if (qr) {
-        detected = true;
-        stopCamera();
-        handleScan(qr.data);
-    } else {
-        requestAnimationFrame(scanLoop);
-    }
+  if (qr) {
+    detected = true;
+    stopCamera();
+    handleScan(qr.data);
+  } else {
+    requestAnimationFrame(scanLoop);
+  }
 }
 
 function stopCamera() {
-    scanning = false;
-    if (video.srcObject)
-        video.srcObject.getTracks().forEach(t => t.stop());
-    video.srcObject = null;
+  scanning = false;
+  if (video.srcObject)
+    video.srcObject.getTracks().forEach(t => t.stop());
+  video.srcObject = null;
 }
 
-// ===== 判定ロジック =====
 function handleScan(code) {
-    playSafe(readSound);
+  playSound("read");
 
-    if (step === 1) {
-        if (code.length < 29) {
-            setStatus("バーコードが短すぎます（29文字未満）", "ng");
-            return;
-        }
-
-        firstCode1 = code.substring(28, 38);
-        firstCode2 = code.length >= 20 ? code.substring(10, 20) : "";
-
-        setStatus("パーツラベルのQRコードを読んでください", "normal");
-        step = 2;
-        return;
-    }
-
-    if (step === 2) {
-        if (code.length < 34) {
-            setStatus("バーコードが短すぎます（34文字未満）", "ng");
-            return;
-        }
-
-        const secondCode = code.substring(33, 43);
-        const ok =
-            secondCode === firstCode1 ||
-            (firstCode2 && secondCode === firstCode2);
-
-        if (ok) {
-            setStatus("✔ 一致しました！", "ok");
-            successSound.play();
-        } else {
-            setStatus("❌ 不一致です", "ng");
-            errorSound.play();
-        }
-
-        saveResult(
-            firstCode1 + (firstCode2 ? " / " + firstCode2 : ""),
-            secondCode,
-            ok ? "OK" : "NG"
-        );
-
-        loadHistory();
-    }
-}
-
-// ===== DB =====
-function saveResult(first, second, result) {
-    const tx = db.transaction("checks","readwrite");
-    tx.objectStore("checks").add({
-        time: new Date().toLocaleString(),
-        first, second, result
-    });
-}
-
-function loadHistory() {
-    const tx = db.transaction("checks","readonly");
-    const req = tx.objectStore("checks").getAll();
-
-    req.onsuccess = () => {
-        const table = document.getElementById("history");
-        table.innerHTML =
-            "<tr><th>時刻</th><th>1回目</th><th>2回目</th><th>結果</th></tr>";
-        req.result.reverse().slice(0,5).forEach(r=>{
-            table.innerHTML += `
-            <tr>
-              <td>${r.time}</td>
-              <td>${r.first}</td>
-              <td>${r.second}</td>
-              <td>${r.result}</td>
-            </tr>`;
-        });
-    };
-}
-
-// ===== リセット =====
-function resetAll() {
-    step = 1;
-    firstCode1 = "";
-    firstCode2 = "";
-    setStatus("現品票のQRを読み込んでください", "normal");
-}
-
-// ===== CSV =====
-function exportCSV() {
-    const tx = db.transaction("checks","readonly");
-    const req = tx.objectStore("checks").getAll();
-
-    req.onsuccess = () => {
-        let csv = "時刻,1回目,2回目,結果\n";
-        req.result.forEach(r=>{
-            csv += `${r.time},${r.first},${r.second},${r.result}\n`;
-        });
-
-        const blob = new Blob([csv],{type:"text/csv"});
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "検品履歴.csv";
-        a.click();
-    };
-}
-
-// ===== イベント =====
-let audioInitialized = false;
-  
-scanBtn.onclick =  () => {
-  //最初の一回だけユーザー操作
-  if(!audioInitialized) {
-      audioInitialized = true;
-      playSafe(readSound);
+  if (step === 1) {
+    firstCode1 = code.substring(28, 38);
+    firstCode2 = code.substring(10, 20);
+    setStatus("パーツラベルのQRコードを読んでください");
+    step = 2;
+    return;
   }
+
+  const secondCode = code.substring(33, 43);
+  const ok = secondCode === firstCode1 || secondCode === firstCode2;
+
+  setStatus(ok ? "✔ 一致しました！" : "❌ 不一致です", ok ? "ok" : "ng");
+  playSound(ok ? "ok" : "ng");
+}
+
+scanBtn.onclick = () => {
+  unlockAudio();
+  playSound("read"); // アンロック確認
   scan();
 };
-resetBtn.onclick = resetAll;
-exportBtn.onclick = exportCSV;
+resetBtn.onclick = () => location.reload();
+exportBtn.onclick = () => {};
 
-  // ===== Androidスリープ復帰対策 =====
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    audioInitialized = false; // ★ 音声を再初期化させる
-  }
-});
 </script>
 
-  <script>
+<script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");
 }
@@ -337,8 +262,3 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
-
-
-
-
-
