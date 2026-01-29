@@ -121,8 +121,33 @@ let scanning = false;
 let detected = false;
 
 // ========= 音声 =========
+const readSound = new Audio("sounds/yomitori.mp3");  
 const successSound = new Audio("sounds/seikou.mp3");
 const errorSound = new Audio("sounds/keikoku.mp3");
+
+let audioInitialized = false;
+
+// 事前ロード
+[readSound, successSound, errorSound].forEach(a => {
+  a.preload = "auto";
+  a.load();
+  //失敗ログ
+  a.addEventListener("error", e => {
+    console.error("audio error:", a.src, e);
+  });
+});
+
+function playSafe(audio) {
+  //再生位置のリセット
+  try {
+      audio.currentTime = 0;
+  } catch(e) {
+      console.warn("cannot reset currentTime:", audio.src, e);
+  }
+  audio.play().catch(e => {
+      console.warn("audio play failed:", audio.src, e);
+  });
+}
 
 // ========= IndexedDB =========
 let db;
@@ -160,6 +185,13 @@ function setStatus(text, type="normal") {
 const video = document.getElementById("camera");
 
 async function startScan() {
+
+    // ★ 初回のみユーザー操作で音を有効化
+  if (!audioInitialized) {
+    audioInitialized = true;
+    playSafe(readSound);
+  }
+  
   if (!firstInput) return alert("先に手入力してください");
 
   if (scanning) return;
@@ -344,6 +376,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
