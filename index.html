@@ -320,6 +320,13 @@ scanBtn.onclick =  () => {
 };
 resetBtn.onclick = resetAll;
 exportBtn.onclick = exportCSV;
+
+  // ===== Androidスリープ復帰対策 =====
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    audioInitialized = false; // ★ 音声を再初期化させる
+  }
+});
 </script>
 
   <script>
@@ -330,6 +337,7 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
 
 
 
